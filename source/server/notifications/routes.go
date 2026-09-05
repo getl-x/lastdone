@@ -115,6 +115,14 @@ func RegisterRoutes(event *core.ServeEvent, config RouteConfig) {
 		}
 		return request.JSON(http.StatusOK, state)
 	}).Bind(apis.RequireAuth("users"))
+
+	event.Router.GET("/api/lastdone/push/devices", func(request *core.RequestEvent) error {
+		states, err := listDeviceStates(request.App, request.Auth.Id)
+		if err != nil {
+			return apis.NewBadRequestError("could not load notification devices", err)
+		}
+		return request.JSON(http.StatusOK, states)
+	}).Bind(apis.RequireAuth("users"))
 }
 
 func subscribe(app core.App, userID string, body subscribeRequest, now time.Time) (deviceState, error) {
@@ -211,6 +219,24 @@ func subscribe(app core.App, userID string, body subscribeRequest, now time.Time
 		if err := transactionApp.Save(subscription); err != nil {
 			return err
 		}
+		otherSubscriptions, err := transactionApp.FindRecordsByFilter(
+			"push_subscriptions",
+			"user={:user} && device={:device} && id!={:id} && enabled=true && deletedAt=''",
+			"",
+			100,
+			0,
+			dbx.Params{"user": userID, "device": device.Id, "id": subscription.Id},
+		)
+		if err != nil {
+			return err
+		}
+		for _, previous := range otherSubscriptions {
+			previous.Set("enabled", false)
+			previous.Set("revision", previous.GetInt("revision")+1)
+			if err := transactionApp.Save(previous); err != nil {
+				return err
+			}
+		}
 		state = stateFromDevice(device, true)
 		return nil
 	})
@@ -277,6 +303,29 @@ func loadDeviceState(app core.App, userID string, deviceID string) (deviceState,
 		return deviceState{}, err
 	}
 	return stateFromDevice(device, enabled), nil
+}
+
+func listDeviceStates(app core.App, userID string) ([]deviceState, error) {
+	records, err := app.FindRecordsByFilter(
+		"devices",
+		"user={:user} && deletedAt=''",
+		"-lastSeenAt,name",
+		1000,
+		0,
+		dbx.Params{"user": userID},
+	)
+	if err != nil {
+		return nil, err
+	}
+	states := make([]deviceState, 0, len(records))
+	for _, device := range records {
+		enabled, err := hasEnabledSubscription(app, device.Id)
+		if err != nil {
+			return nil, err
+		}
+		states = append(states, stateFromDevice(device, enabled))
+	}
+	return states, nil
 }
 
 func findOwnedDevice(app core.App, userID string, deviceID string) (*core.Record, error) {

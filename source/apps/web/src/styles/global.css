@@ -742,6 +742,43 @@ a {
   font-weight: 700;
 }
 
+.notification-settings {
+  display: grid;
+  align-content: start;
+  gap: 0.85rem;
+}
+
+.notification-settings > :is(h2, h3, p) {
+  margin: 0;
+}
+
+.notification-settings h3 {
+  margin-top: 0.35rem;
+  font-size: 1rem;
+}
+
+.notification-preferences {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.notification-preferences label {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 650;
+}
+
+.notification-device-list li {
+  display: grid;
+  justify-content: stretch;
+  gap: 0.2rem;
+}
+
+.notification-device-list span {
+  font-size: 0.82rem;
+}
+
 .simple-list li {
   justify-content: space-between;
 }

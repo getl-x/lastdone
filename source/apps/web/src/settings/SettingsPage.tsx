@@ -1,5 +1,11 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 
 import type {
   CategoryRecord,
@@ -13,6 +19,11 @@ import type {
 
 import { useAuth } from "../auth/AuthProvider";
 import { useData } from "../data/DataProvider";
+import type {
+  NotificationDeviceState,
+  NotificationPreferences,
+} from "../notifications/client";
+import { useNotifications } from "../notifications/NotificationProvider";
 
 export interface LastDoneExport {
   format: "lastdone-export";
@@ -68,6 +79,7 @@ function csvCell(value: unknown): string {
 export function SettingsPage() {
   const { db, repositories, userId } = useData();
   const { changePassword } = useAuth();
+  const notifications = useNotifications();
   const settings = useLiveQuery(() => db.settings.get(userId), [db, userId]);
   const devices = useLiveQuery(
     () => db.devices.where("userId").equals(userId).toArray(),
@@ -83,6 +95,76 @@ export function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [notificationState, setNotificationState] = useState<
+    | NotificationDeviceState
+    | { status: "unsupported" | "denied" | "disabled"; platform: "web" | "ios-pwa" }
+    | null
+  >(null);
+  const [notificationDevices, setNotificationDevices] = useState<
+    NotificationDeviceState[]
+  >([]);
+  const [notificationBusy, setNotificationBusy] = useState(false);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
+
+  const refreshNotificationDevices = useCallback(async () => {
+    try {
+      const values = await notifications.listDevices();
+      setNotificationDevices(values);
+      const timestamp = new Date().toISOString();
+      await db.transaction("rw", db.devices, async () => {
+        for (const value of values) {
+          const existing = await db.devices.get(value.deviceId);
+          await db.devices.put({
+            id: value.deviceId,
+            userId,
+            revision: existing?.revision ?? 1,
+            createdAt: existing?.createdAt ?? timestamp,
+            updatedAt: timestamp,
+            deletedAt: null,
+            name: value.deviceName,
+            platform: value.platform,
+            digestEnabled: value.digestEnabled,
+            importantRemindersEnabled: value.importantRemindersEnabled,
+            lastSeenAt: timestamp,
+          });
+        }
+      });
+    } catch {
+      const cached = await db.devices.where("userId").equals(userId).toArray();
+      setNotificationDevices(
+        cached
+          .filter((device) => !device.deletedAt)
+          .map((device) => ({
+            deviceId: device.id,
+            deviceName: device.name,
+            platform: device.platform,
+            digestEnabled: device.digestEnabled,
+            importantRemindersEnabled: device.importantRemindersEnabled,
+            enabled: false,
+            status: "disabled",
+          })),
+      );
+    }
+  }, [db, notifications, userId]);
+
+  useEffect(() => {
+    let active = true;
+    void notifications
+      .inspect()
+      .then((state) => {
+        if (active) setNotificationState(state);
+      })
+      .catch(() => {
+        if (active) {
+          setNotificationState({ status: "disabled", platform: "web" });
+          setNotificationError("暂时无法读取这台设备的通知状态。");
+        }
+      });
+    void refreshNotificationDevices();
+    return () => {
+      active = false;
+    };
+  }, [notifications, refreshNotificationDevices]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -166,6 +248,63 @@ export function SettingsPage() {
     }
   }
 
+  async function enableNotifications() {
+    setNotificationBusy(true);
+    setNotificationError(null);
+    try {
+      const state = await notifications.enable();
+      setNotificationState(state);
+      await refreshNotificationDevices();
+    } catch {
+      setNotificationError("通知启用失败，请确认网络连接后重试。");
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
+
+  async function disableNotifications() {
+    setNotificationBusy(true);
+    setNotificationError(null);
+    try {
+      const state = await notifications.disable();
+      setNotificationState(state);
+      await refreshNotificationDevices();
+    } catch {
+      setNotificationError("通知关闭失败，请稍后重试。");
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
+
+  async function updateNotificationPreferences(
+    patch: Partial<NotificationPreferences>,
+  ) {
+    if (!notificationState || !("deviceId" in notificationState)) return;
+    const previous = notificationState;
+    const optimistic: NotificationDeviceState = {
+      ...notificationState,
+      digestEnabled: patch.digestEnabled ?? notificationState.digestEnabled,
+      importantRemindersEnabled:
+        patch.importantRemindersEnabled ?? notificationState.importantRemindersEnabled,
+    };
+    setNotificationState(optimistic);
+    setNotificationBusy(true);
+    setNotificationError(null);
+    try {
+      const next = await notifications.updatePreferences(notificationState.deviceId, {
+        digestEnabled: optimistic.digestEnabled,
+        importantRemindersEnabled: optimistic.importantRemindersEnabled,
+      });
+      setNotificationState(next);
+      await refreshNotificationDevices();
+    } catch {
+      setNotificationState(previous);
+      setNotificationError("通知偏好保存失败，请稍后重试。");
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
+
   if (settings === undefined) {
     return <p className="loading-state">正在读取设置…</p>;
   }
@@ -235,6 +374,106 @@ export function SettingsPage() {
               {saved ? <span className="saved-state">已保存</span> : null}
             </div>
           </form>
+        </section>
+
+        <section className="surface-card notification-settings">
+          <h2>通知</h2>
+          {notificationState === null ? (
+            <p className="muted">正在读取这台设备的通知状态…</p>
+          ) : null}
+          {notificationState?.status === "unsupported" ? (
+            <div className="notice notice-info">
+              此浏览器不支持 Web Push。iPhone 请先用 Safari 将 LastDone 添加到主屏幕。
+            </div>
+          ) : null}
+          {notificationState?.status === "denied" ? (
+            <div className="notice notice-error" role="alert">
+              通知权限已被系统拒绝，请在浏览器或系统设置中重新允许。
+            </div>
+          ) : null}
+          {notificationState?.status === "disabled" ? (
+            <>
+              <p className="muted">
+                通知尚未在这台设备启用。只有点击按钮后才会请求系统权限。
+              </p>
+              <button
+                className="button button-primary"
+                type="button"
+                disabled={notificationBusy}
+                onClick={() => void enableNotifications()}
+              >
+                {notificationBusy ? "正在启用…" : "启用这台设备的通知"}
+              </button>
+            </>
+          ) : null}
+          {notificationState?.status === "enabled" ? (
+            <>
+              <p className="sync-status">
+                <span className="status-dot" />
+                这台设备已启用 Web Push
+              </p>
+              <div className="notification-preferences">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={notificationState.digestEnabled}
+                    disabled={notificationBusy}
+                    onChange={(event) =>
+                      void updateNotificationPreferences({
+                        digestEnabled: event.target.checked,
+                      })
+                    }
+                  />
+                  每日摘要
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={notificationState.importantRemindersEnabled}
+                    disabled={notificationBusy}
+                    onChange={(event) =>
+                      void updateNotificationPreferences({
+                        importantRemindersEnabled: event.target.checked,
+                      })
+                    }
+                  />
+                  重要事项提醒
+                </label>
+              </div>
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={notificationBusy}
+                onClick={() => void disableNotifications()}
+              >
+                关闭这台设备的通知
+              </button>
+            </>
+          ) : null}
+          {notificationError ? (
+            <p className="field-error" role="alert">
+              {notificationError}
+            </p>
+          ) : null}
+          {notificationDevices.length > 0 ? (
+            <>
+              <h3>已登记设备</h3>
+              <ul className="simple-list notification-device-list">
+                {notificationDevices.map((device) => (
+                  <li key={device.deviceId}>
+                    <strong>{device.deviceName}</strong>
+                    <span>
+                      {device.enabled ? "通知开启" : "通知关闭"} ·
+                      {device.digestEnabled ? " 摘要开启" : " 摘要关闭"} ·
+                      {device.importantRemindersEnabled
+                        ? " 重要提醒开启"
+                        : " 重要提醒关闭"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
         </section>
 
         <section className="surface-card">

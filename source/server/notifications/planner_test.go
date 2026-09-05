@@ -125,7 +125,7 @@ func TestPlanDelaysNotificationsUntilQuietHoursEnd(t *testing.T) {
 	input.Settings.DigestTime = "23:30"
 	input.Devices[0].ImportantRemindersEnabled = false
 	input.Items = []Item{{
-		ID: "overdue", Name: "备份电脑", DueDate: "2026-09-04", Lifecycle: "active",
+		ID: "today", Name: "备份电脑", DueDate: "2026-09-05", Lifecycle: "active",
 	}}
 
 	beforeEnd, err := Plan(fixedTime(t, "2026-09-05T23:59:00+08:00"), input)
@@ -145,6 +145,9 @@ func TestPlanDelaysNotificationsUntilQuietHoursEnd(t *testing.T) {
 	}
 	if atEnd[0].Identity != "user-1:digest:2026-09-05:device-1" {
 		t.Fatalf("digest must retain its logical date: %#v", atEnd[0])
+	}
+	if atEnd[0].Payload.Body != "逾期 0 · 今天 1 · 即将 0｜备份电脑" {
+		t.Fatalf("digest must use its logical date, got %q", atEnd[0].Payload.Body)
 	}
 	want := fixedTime(t, "2026-09-06T00:00:00Z")
 	if !atEnd[0].DeliverAt.Equal(want) {

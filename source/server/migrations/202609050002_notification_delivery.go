@@ -28,6 +28,8 @@ func init() {
 		if err != nil {
 			return err
 		}
+		subscriptions.ListRule = nil
+		subscriptions.ViewRule = nil
 		subscriptions.CreateRule = nil
 		subscriptions.UpdateRule = nil
 		subscriptions.DeleteRule = nil
@@ -56,6 +58,8 @@ func init() {
 		if err != nil {
 			return err
 		}
+		subscriptions.ListRule = types.Pointer("user = @request.auth.id")
+		subscriptions.ViewRule = types.Pointer("user = @request.auth.id")
 		subscriptions.CreateRule = types.Pointer("@request.body.user = @request.auth.id")
 		subscriptions.UpdateRule = types.Pointer(
 			"user = @request.auth.id && (@request.body.user:isset = false || @request.body.user = @request.auth.id)",

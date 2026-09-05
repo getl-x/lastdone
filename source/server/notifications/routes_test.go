@@ -162,6 +162,20 @@ func TestNotificationPreferencesAndUnsubscribeUpdateOwnedDevice(t *testing.T) {
 		}).Test(t)
 	})
 
+	t.Run("device list", func(t *testing.T) {
+		headers := map[string]string{}
+		(&tests.ApiScenario{
+			Name:            "lists owned notification devices",
+			Method:          http.MethodGet,
+			URL:             "/api/lastdone/push/devices",
+			Headers:         headers,
+			ExpectedStatus:  http.StatusOK,
+			ExpectedContent: []string{`"deviceName":"Desktop"`, `"enabled":true`},
+			TestAppFactory:  notificationRouteFactory(headers, seed),
+			BeforeTestFunc:  registerNotificationTestRoutes,
+		}).Test(t)
+	})
+
 	t.Run("unsubscribe", func(t *testing.T) {
 		headers := map[string]string{}
 		(&tests.ApiScenario{

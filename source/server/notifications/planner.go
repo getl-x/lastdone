@@ -41,7 +41,7 @@ func Plan(now time.Time, input PlanInput) ([]Candidate, error) {
 
 	localNow := now.In(location)
 	today := localNow.Format(dateLayout)
-	overdue, dueToday, dueSoon, attention := classifyItems(
+	currentOverdue, _, _, _ := classifyItems(
 		input.Items,
 		today,
 		input.Settings.DueSoonDays,
@@ -50,11 +50,21 @@ func Plan(now time.Time, input PlanInput) ([]Candidate, error) {
 	candidates := make([]Candidate, 0)
 
 	for _, device := range input.Devices {
-		if device.DigestEnabled && len(attention) > 0 {
+		if device.DigestEnabled {
 			for _, logicalDate := range []time.Time{
 				localDate(localNow),
 				localDate(localNow).AddDate(0, 0, -1),
 			} {
+				logicalDateValue := logicalDate.Format(dateLayout)
+				overdue, dueToday, dueSoon, attention := classifyItems(
+					input.Items,
+					logicalDateValue,
+					input.Settings.DueSoonDays,
+					location,
+				)
+				if len(attention) == 0 {
+					continue
+				}
 				nominal := time.Date(
 					logicalDate.Year(),
 					logicalDate.Month(),
@@ -72,7 +82,7 @@ func Plan(now time.Time, input PlanInput) ([]Candidate, error) {
 				identity := fmt.Sprintf(
 					"%s:digest:%s:%s",
 					input.UserID,
-					logicalDate.Format(dateLayout),
+					logicalDateValue,
 					device.ID,
 				)
 				candidates = append(candidates, Candidate{
@@ -80,7 +90,7 @@ func Plan(now time.Time, input PlanInput) ([]Candidate, error) {
 					UserID:         input.UserID,
 					DeviceID:       device.ID,
 					Kind:           KindDigest,
-					OccurrenceDate: logicalDate.Format(dateLayout),
+					OccurrenceDate: logicalDateValue,
 					DeliverAt:      deliverAt.UTC(),
 					Payload: Payload{
 						Title: "LastDone 每日摘要",
@@ -150,7 +160,7 @@ func Plan(now time.Time, input PlanInput) ([]Candidate, error) {
 							Body:  reminderBody(offset, item.DueDate),
 							URL:   "/items/" + item.ID,
 							Tag:   identity,
-							Badge: overdue,
+							Badge: currentOverdue,
 						},
 					})
 				}

@@ -9,6 +9,8 @@ import { LastDoneDatabase } from "@lastdone/storage";
 
 import { AuthProvider } from "../auth/AuthProvider";
 import { DataProvider } from "../data/DataProvider";
+import type { NotificationClient } from "../notifications/client";
+import { NotificationProvider } from "../notifications/NotificationProvider";
 import { SettingsPage, buildJsonExport } from "./SettingsPage";
 
 const databases: LastDoneDatabase[] = [];
@@ -113,5 +115,94 @@ describe("SettingsPage", () => {
 
     expect(changePassword).toHaveBeenCalledWith("old-password", "new-password");
     expect(await screen.findByText("密码已更新。")).toBeInTheDocument();
+  });
+
+  it("requests notification permission only after an explicit button click", async () => {
+    const user = userEvent.setup();
+    const db = new LastDoneDatabase(`notifications-${crypto.randomUUID()}`);
+    databases.push(db);
+    const enable = vi.fn<NotificationClient["enable"]>(async () => ({
+      status: "enabled",
+      deviceId: "device000000001",
+      deviceName: "iPhone PWA",
+      platform: "ios-pwa",
+      digestEnabled: true,
+      importantRemindersEnabled: true,
+      enabled: true,
+    }));
+    const notificationClient: NotificationClient = {
+      inspect: async () => ({ status: "disabled", platform: "ios-pwa" }),
+      enable,
+      disable: async () => ({ status: "disabled", platform: "ios-pwa" }),
+      listDevices: async () => [],
+      updatePreferences: async () => {
+        throw new Error("not used");
+      },
+    };
+
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          client={{
+            currentUser: () => ({ id: "user-1", username: "getl" }),
+            login: async () => ({ id: "user-1", username: "getl" }),
+            logout: () => undefined,
+          }}
+        >
+          <NotificationProvider client={notificationClient}>
+            <DataProvider db={db} userId="user-1">
+              <SettingsPage />
+            </DataProvider>
+          </NotificationProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    const button = await screen.findByRole("button", {
+      name: "启用这台设备的通知",
+    });
+    expect(enable).not.toHaveBeenCalled();
+    await user.click(button);
+
+    expect(enable).toHaveBeenCalledOnce();
+    expect(await screen.findByText("这台设备已启用 Web Push")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "每日摘要" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "重要事项提醒" })).toBeChecked();
+  });
+
+  it("explains denied notification permission", async () => {
+    const db = new LastDoneDatabase(`notifications-denied-${crypto.randomUUID()}`);
+    databases.push(db);
+    const notificationClient: NotificationClient = {
+      inspect: async () => ({ status: "denied", platform: "web" }),
+      enable: async () => ({ status: "denied", platform: "web" }),
+      disable: async () => ({ status: "disabled", platform: "web" }),
+      listDevices: async () => [],
+      updatePreferences: async () => {
+        throw new Error("not used");
+      },
+    };
+
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          client={{
+            currentUser: () => ({ id: "user-1", username: "getl" }),
+            login: async () => ({ id: "user-1", username: "getl" }),
+            logout: () => undefined,
+          }}
+        >
+          <NotificationProvider client={notificationClient}>
+            <DataProvider db={db} userId="user-1">
+              <SettingsPage />
+            </DataProvider>
+          </NotificationProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("通知权限已被系统拒绝，请在浏览器或系统设置中重新允许。"),
+    ).toBeInTheDocument();
   });
 });

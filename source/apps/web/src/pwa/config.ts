@@ -50,6 +50,7 @@ export const workbox: VitePWAOptions["workbox"] = {
   cleanupOutdatedCaches: true,
   clientsClaim: false,
   skipWaiting: false,
+  importScripts: ["/push-handler.js"],
   runtimeCaching: [
     {
       urlPattern: ({ request }) => request.mode === "navigate",

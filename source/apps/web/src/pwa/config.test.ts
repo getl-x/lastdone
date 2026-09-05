@@ -30,5 +30,6 @@ describe("PWA configuration", () => {
       workbox.navigateFallbackDenylist?.some((pattern) => pattern.test("/api/test")),
     ).toBe(true);
     expect(workbox.runtimeCaching?.[0]).toMatchObject({ handler: "NetworkFirst" });
+    expect(workbox.importScripts).toContain("/push-handler.js");
   });
 });

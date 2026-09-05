@@ -10,6 +10,8 @@ import {
   type AuthUser,
 } from "../auth/AuthProvider";
 import { DataProvider } from "../data/DataProvider";
+import { BrowserNotificationClient } from "../notifications/client";
+import { NotificationProvider } from "../notifications/NotificationProvider";
 
 function toUser(record: RecordModel | null): AuthUser | null {
   if (!record) {
@@ -60,9 +62,18 @@ export function AppProviders({ children }: PropsWithChildren) {
       }),
     [pocketBase],
   );
+  const notificationClient = useMemo(
+    () =>
+      new BrowserNotificationClient({
+        getToken: () => pocketBase.authStore.token || null,
+      }),
+    [pocketBase],
+  );
   return (
     <AuthProvider client={authClient}>
-      <AuthenticatedData syncTransport={syncTransport}>{children}</AuthenticatedData>
+      <NotificationProvider client={notificationClient}>
+        <AuthenticatedData syncTransport={syncTransport}>{children}</AuthenticatedData>
+      </NotificationProvider>
     </AuthProvider>
   );
 }
