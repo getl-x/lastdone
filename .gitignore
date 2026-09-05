@@ -1,0 +1,39 @@
+# Default-deny policy: ignore every top-level path unless explicitly allowed.
+/*
+
+# Keep the tracking policy itself.
+!/.gitignore
+
+# All application source is tracked.
+!/source/
+!/source/**
+
+# Approved bilingual design documents.
+!/LASTDONE-DESIGN.en.md
+!/LASTDONE-DESIGN.zh-CN.md
+
+# Docker build and Compose files at the repository root.
+!/Dockerfile
+!/Dockerfile.*
+!/.dockerignore
+!/compose.yml
+!/compose.yaml
+!/compose.*.yml
+!/compose.*.yaml
+!/docker-compose.yml
+!/docker-compose.yaml
+!/docker-compose.*.yml
+!/docker-compose.*.yaml
+
+# Docker and deployment directories.
+!/docker/
+!/docker/**
+!/deploy/
+!/deploy/**
+
+# Only the Docker publishing workflow is tracked under .github.
+!/.github/
+/.github/*
+!/.github/workflows/
+/.github/workflows/*
+!/.github/workflows/docker-publish.yml
