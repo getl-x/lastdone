@@ -16,7 +16,7 @@ func TestHealthRoute(t *testing.T) {
 		ExpectedContent: []string{
 			`"status":"ok"`,
 			`"appVersion":"test-version"`,
-			`"databaseVersion":"202609050001"`,
+			`"databaseVersion":"202609050002"`,
 		},
 		TestAppFactory: func(t testing.TB) *tests.TestApp {
 			t.Helper()
@@ -25,8 +25,10 @@ func TestHealthRoute(t *testing.T) {
 				t.Fatal(err)
 			}
 			RegisterHooks(application, Config{
-				PublicDir:  t.TempDir(),
-				AppVersion: "test-version",
+				DataDir:      t.TempDir(),
+				PublicDir:    t.TempDir(),
+				AppVersion:   "test-version",
+				VAPIDSubject: "https://lastdone.test",
 			})
 			return application
 		},

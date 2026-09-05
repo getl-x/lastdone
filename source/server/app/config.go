@@ -2,19 +2,21 @@ package app
 
 import "os"
 
-const DatabaseVersion = "202609050001"
+const DatabaseVersion = "202609050002"
 
 type Config struct {
-	DataDir    string
-	PublicDir  string
-	AppVersion string
+	DataDir      string
+	PublicDir    string
+	AppVersion   string
+	VAPIDSubject string
 }
 
 func DefaultConfig() Config {
 	return Config{
-		DataDir:    envOrDefault("LASTDONE_DATA_DIR", "pb_data"),
-		PublicDir:  envOrDefault("LASTDONE_PUBLIC_DIR", "pb_public"),
-		AppVersion: envOrDefault("LASTDONE_VERSION", "dev"),
+		DataDir:      envOrDefault("LASTDONE_DATA_DIR", "pb_data"),
+		PublicDir:    envOrDefault("LASTDONE_PUBLIC_DIR", "pb_public"),
+		AppVersion:   envOrDefault("LASTDONE_VERSION", "dev"),
+		VAPIDSubject: envOrDefault("LASTDONE_VAPID_SUBJECT", "https://lastdone.local"),
 	}
 }
 

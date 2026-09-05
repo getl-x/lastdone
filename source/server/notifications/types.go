@@ -1,6 +1,9 @@
 package notifications
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type Kind string
 
@@ -57,4 +60,37 @@ type Candidate struct {
 	ReminderOffset int
 	DeliverAt      time.Time
 	Payload        Payload
+}
+
+type Subscription struct {
+	ID       string
+	UserID   string
+	DeviceID string
+	Endpoint string
+	P256DH   string
+	Auth     string
+	Enabled  bool
+}
+
+type SendResult struct {
+	Expired bool
+}
+
+type Sender interface {
+	Send(ctx context.Context, subscription Subscription, payload Payload) (SendResult, error)
+}
+
+type DispatchStore interface {
+	LoadPlanInputs(ctx context.Context) ([]PlanInput, error)
+	FindSubscription(ctx context.Context, deviceID string) (Subscription, bool, error)
+	Claim(ctx context.Context, candidate Candidate, attemptedAt time.Time) (bool, error)
+	MarkSent(ctx context.Context, identity string, sentAt time.Time) error
+	MarkFailed(ctx context.Context, identity string, attemptedAt time.Time, message string) error
+	DisableSubscription(ctx context.Context, subscriptionID string) error
+}
+
+type DispatchResult struct {
+	Sent    int
+	Failed  int
+	Skipped int
 }
