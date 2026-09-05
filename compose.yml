@@ -1,0 +1,33 @@
+name: lastdone
+
+services:
+  lastdone:
+    image: ${LASTDONE_IMAGE:-getl-x/lastdone:latest}
+    restart: unless-stopped
+    environment:
+      GOMEMLIMIT: ${GOMEMLIMIT:-384MiB}
+      LASTDONE_DATA_DIR: /pb/pb_data
+      LASTDONE_PUBLIC_DIR: /pb/pb_public
+      LASTDONE_VAPID_SUBJECT: ${LASTDONE_VAPID_SUBJECT:-https://example.com}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "127.0.0.1:${LASTDONE_PORT:-8090}:8090"
+    volumes:
+      - lastdone_data:/pb/pb_data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/lastdone", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  lastdone_data:
