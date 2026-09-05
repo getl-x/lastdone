@@ -2,11 +2,14 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/getl-x/lastdone/source/server/notifications"
+	"github.com/getl-x/lastdone/source/server/ops"
 	lastdonesync "github.com/getl-x/lastdone/source/server/sync"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
@@ -22,6 +25,41 @@ func New(config Config) *pocketbase.PocketBase {
 }
 
 func RegisterHooks(application core.App, config Config) {
+	application.OnBootstrap().BindFunc(func(event *core.BootstrapEvent) error {
+		dataDir := event.App.DataDir()
+		if dataDir == "" {
+			dataDir = config.DataDir
+		}
+		_, statErr := os.Stat(filepath.Join(dataDir, "data.db"))
+		databaseExists := statErr == nil
+		if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			return statErr
+		}
+
+		if err := event.Next(); err != nil {
+			return err
+		}
+
+		manager := ops.BackupManager{
+			DataDir: event.App.DataDir(),
+			Create:  event.App.CreateBackup,
+		}
+		if _, err := manager.BeforeUpgrade(
+			context.Background(),
+			config.AppVersion,
+			databaseExists,
+		); err != nil {
+			return err
+		}
+		if err := event.App.RunAppMigrations(); err != nil {
+			return err
+		}
+		if err := manager.MarkVersion(config.AppVersion); err != nil {
+			return err
+		}
+		return manager.EnsureDaily(context.Background())
+	})
+
 	application.OnServe().BindFunc(func(event *core.ServeEvent) error {
 		keys, err := notifications.LoadOrCreateVAPIDKeys(config.DataDir, nil)
 		if err != nil {
@@ -37,6 +75,15 @@ func RegisterHooks(application core.App, config Config) {
 		event.App.Cron().MustAdd("lastdone-notifications", "* * * * *", func() {
 			if _, err := dispatcher.Run(context.Background(), time.Now()); err != nil {
 				event.App.Logger().Error("notification dispatch failed", "error", err)
+			}
+		})
+		backupManager := ops.BackupManager{
+			DataDir: event.App.DataDir(),
+			Create:  event.App.CreateBackup,
+		}
+		event.App.Cron().MustAdd("lastdone-daily-backup", "0 3 * * *", func() {
+			if err := backupManager.EnsureDaily(context.Background()); err != nil {
+				event.App.Logger().Error("daily backup failed", "error", err)
 			}
 		})
 		notifications.RegisterRoutes(event, notifications.RouteConfig{

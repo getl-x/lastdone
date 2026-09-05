@@ -20,7 +20,7 @@ func TestHealthRoute(t *testing.T) {
 		},
 		TestAppFactory: func(t testing.TB) *tests.TestApp {
 			t.Helper()
-			application, err := tests.NewTestApp()
+			application, err := tests.NewTestApp(t.TempDir())
 			if err != nil {
 				t.Fatal(err)
 			}
