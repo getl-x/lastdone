@@ -1,0 +1,62 @@
+[
+  {
+    "name": "adds relative days",
+    "baseline": "2026-01-01",
+    "rule": { "type": "relative", "every": 30, "unit": "days" },
+    "expected": "2026-01-31"
+  },
+  {
+    "name": "adds relative weeks",
+    "baseline": "2026-01-03",
+    "rule": { "type": "relative", "every": 12, "unit": "weeks" },
+    "expected": "2026-03-28"
+  },
+  {
+    "name": "clamps January 31 to a non-leap February",
+    "baseline": "2026-01-31",
+    "rule": { "type": "relative", "every": 1, "unit": "months" },
+    "expected": "2026-02-28"
+  },
+  {
+    "name": "clamps January 31 to a leap February",
+    "baseline": "2028-01-31",
+    "rule": { "type": "relative", "every": 1, "unit": "months" },
+    "expected": "2028-02-29"
+  },
+  {
+    "name": "clamps leap day when adding a year",
+    "baseline": "2028-02-29",
+    "rule": { "type": "relative", "every": 1, "unit": "years" },
+    "expected": "2029-02-28"
+  },
+  {
+    "name": "uses this month fixed occurrence when still ahead",
+    "baseline": "2026-04-10",
+    "rule": { "type": "fixed-monthly", "day": 31 },
+    "expected": "2026-04-30"
+  },
+  {
+    "name": "advances fixed monthly occurrence after the due day",
+    "baseline": "2026-04-30",
+    "rule": { "type": "fixed-monthly", "day": 31 },
+    "expected": "2026-05-31"
+  },
+  {
+    "name": "uses this year fixed occurrence when still ahead",
+    "baseline": "2026-09-04",
+    "rule": { "type": "fixed-yearly", "month": 9, "day": 5 },
+    "expected": "2026-09-05"
+  },
+  {
+    "name": "advances fixed yearly occurrence after the due day",
+    "baseline": "2026-09-05",
+    "rule": { "type": "fixed-yearly", "month": 9, "day": 5 },
+    "expected": "2027-09-05"
+  },
+  {
+    "name": "clamps yearly leap day in a non-leap year",
+    "baseline": "2025-01-01",
+    "rule": { "type": "fixed-yearly", "month": 2, "day": 29 },
+    "expected": "2025-02-28"
+  }
+]

@@ -10,7 +10,7 @@ async function main() {
     manifest = JSON.parse(
       await readFile(new URL("../package.json", import.meta.url), "utf8"),
     );
-  } catch (error) {
+  } catch {
     console.error("source/package.json is missing or invalid");
     process.exitCode = 1;
     return;

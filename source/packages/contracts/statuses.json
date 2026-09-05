@@ -1,0 +1,110 @@
+[
+  {
+    "name": "paused overrides dates",
+    "input": {
+      "today": "2026-09-05",
+      "dueDate": "2026-01-01",
+      "lastCompletedDate": "2025-01-01",
+      "dueSoonDays": 7,
+      "lifecycle": "paused"
+    },
+    "expected": "paused",
+    "expectedZh": "已暂停"
+  },
+  {
+    "name": "archived overrides dates",
+    "input": {
+      "today": "2026-09-05",
+      "dueDate": "2026-01-01",
+      "lastCompletedDate": "2025-01-01",
+      "dueSoonDays": 7,
+      "lifecycle": "archived"
+    },
+    "expected": "archived",
+    "expectedZh": "已归档"
+  },
+  {
+    "name": "identifies overdue item",
+    "input": {
+      "today": "2026-09-05",
+      "dueDate": "2026-08-24",
+      "lastCompletedDate": "2026-05-24",
+      "dueSoonDays": 7,
+      "lifecycle": "active"
+    },
+    "expected": "overdue",
+    "expectedZh": "已逾期 12 天"
+  },
+  {
+    "name": "identifies item due today",
+    "input": {
+      "today": "2026-09-05",
+      "dueDate": "2026-09-05",
+      "lastCompletedDate": "2026-06-05",
+      "dueSoonDays": 7,
+      "lifecycle": "active"
+    },
+    "expected": "due-today",
+    "expectedZh": "今天到期"
+  },
+  {
+    "name": "identifies due-soon item",
+    "input": {
+      "today": "2026-09-05",
+      "dueDate": "2026-09-12",
+      "lastCompletedDate": "2026-03-12",
+      "dueSoonDays": 7,
+      "lifecycle": "active"
+    },
+    "expected": "due-soon",
+    "expectedZh": "还有 7 天"
+  },
+  {
+    "name": "identifies healthy completed item",
+    "input": {
+      "today": "2026-09-05",
+      "dueDate": "2026-11-12",
+      "lastCompletedDate": "2026-08-12",
+      "dueSoonDays": 7,
+      "lifecycle": "active"
+    },
+    "expected": "healthy",
+    "expectedZh": "还有 68 天"
+  },
+  {
+    "name": "identifies future never-completed item as not started",
+    "input": {
+      "today": "2026-09-05",
+      "dueDate": "2026-11-12",
+      "lastCompletedDate": null,
+      "dueSoonDays": 7,
+      "lifecycle": "active"
+    },
+    "expected": "not-started",
+    "expectedZh": "尚未开始"
+  },
+  {
+    "name": "never-completed item becomes due soon",
+    "input": {
+      "today": "2026-09-05",
+      "dueDate": "2026-09-07",
+      "lastCompletedDate": null,
+      "dueSoonDays": 7,
+      "lifecycle": "active"
+    },
+    "expected": "due-soon",
+    "expectedZh": "还有 2 天"
+  },
+  {
+    "name": "item without an initial date is not started",
+    "input": {
+      "today": "2026-09-05",
+      "dueDate": null,
+      "lastCompletedDate": null,
+      "dueSoonDays": 7,
+      "lifecycle": "active"
+    },
+    "expected": "not-started",
+    "expectedZh": "尚未开始"
+  }
+]
