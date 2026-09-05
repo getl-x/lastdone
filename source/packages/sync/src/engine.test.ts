@@ -188,4 +188,67 @@ describe("sync engine", () => {
     expect((await db.conflicts.get("conflict-1"))?.status).toBe("unresolved");
     expect((await db.syncMeta.get(USER_ID))?.lastSequence).toBe(9);
   });
+
+  it("runs another cycle when work is requested during an active sync", async () => {
+    const operation = (id: string) => ({
+      id,
+      userId: USER_ID,
+      entity: "items" as const,
+      entityId: `item-${id}`,
+      action: "create" as const,
+      baseRevision: 0,
+      fields: { name: id },
+      createdAt: "2026-09-05T01:00:00.000Z",
+      status: "pending" as const,
+      attempts: 0,
+      lastError: null,
+    });
+    await enqueueOperation(db, operation("operation-1"));
+
+    let releaseFirstPush!: () => void;
+    const firstPushStarted = new Promise<void>((resolve) => {
+      releaseFirstPush = resolve;
+    });
+    let unblockFirstPush!: () => void;
+    const firstPushBlocked = new Promise<void>((resolve) => {
+      unblockFirstPush = resolve;
+    });
+    const pushed: string[][] = [];
+    const engine = createSyncEngine({
+      db,
+      userId: USER_ID,
+      transport: {
+        async push(operations) {
+          pushed.push(operations.map(({ id }) => id));
+          if (pushed.length === 1) {
+            releaseFirstPush();
+            await firstPushBlocked;
+          }
+          return {
+            appliedOperationIds: operations.map(({ id }) => id),
+            conflicts: [],
+          };
+        },
+        async pull() {
+          return {
+            changes: [],
+            conflicts: [],
+            nextSequence: 0,
+            hasMore: false,
+          };
+        },
+      },
+    });
+
+    const firstRun = engine.run();
+    await firstPushStarted;
+    await enqueueOperation(db, operation("operation-2"));
+    const queuedRun = engine.run();
+    unblockFirstPush();
+
+    await Promise.all([firstRun, queuedRun]);
+
+    expect(pushed).toEqual([["operation-1"], ["operation-2"]]);
+    expect(await listPendingOperations(db, 10)).toEqual([]);
+  });
 });

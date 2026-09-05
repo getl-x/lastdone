@@ -1,6 +1,8 @@
 **/coverage
 **/dist
 **/node_modules
+**/playwright-report
+**/test-results
 apps/android
 package-lock.json
 server/pb_data

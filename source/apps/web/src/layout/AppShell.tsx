@@ -1,6 +1,9 @@
 import type { PropsWithChildren, ReactNode } from "react";
 import { NavLink } from "react-router";
 
+import { ConnectivityBanner } from "../pwa/ConnectivityBanner";
+import { UpdatePrompt } from "../pwa/UpdatePrompt";
+
 const NAVIGATION = [
   { to: "/", label: "首页", icon: "⌂", end: true },
   { to: "/categories", label: "分类", icon: "◫", end: false },
@@ -47,6 +50,7 @@ export function AppShell({
       </aside>
 
       <div className="app-content">
+        <ConnectivityBanner />
         {header ? <header className="page-header">{header}</header> : null}
         <main className="page-content">{children}</main>
       </div>
@@ -54,6 +58,7 @@ export function AppShell({
       <nav className="mobile-navigation" aria-label="移动导航">
         <NavigationLinks />
       </nav>
+      <UpdatePrompt />
     </div>
   );
 }

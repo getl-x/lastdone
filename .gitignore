@@ -13,6 +13,8 @@
 /source/**/node_modules/
 /source/**/dist/
 /source/**/coverage/
+/source/**/playwright-report/
+/source/**/test-results/
 /source/**/.cache/
 /source/**/.vite/
 /source/**/.gradle/

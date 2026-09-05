@@ -42,6 +42,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let retryDelayMs = 1_000;
   let activeRun: Promise<SyncResult> | undefined;
+  let rerunRequested = false;
 
   async function execute(): Promise<SyncResult> {
     const result: SyncResult = { pushed: 0, pulled: 0, conflicts: 0 };
@@ -101,11 +102,25 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
   }
 
   function run(): Promise<SyncResult> {
-    if (!activeRun) {
-      activeRun = execute().finally(() => {
-        activeRun = undefined;
-      });
+    if (activeRun) {
+      rerunRequested = true;
+      return activeRun;
     }
+
+    activeRun = (async () => {
+      const combined: SyncResult = { pushed: 0, pulled: 0, conflicts: 0 };
+      do {
+        rerunRequested = false;
+        const result = await execute();
+        combined.pushed += result.pushed;
+        combined.pulled += result.pulled;
+        combined.conflicts += result.conflicts;
+      } while (rerunRequested);
+      return combined;
+    })().finally(() => {
+      activeRun = undefined;
+    });
+
     return activeRun;
   }
 

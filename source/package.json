@@ -18,9 +18,16 @@
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
+  "optionalDependencies": {
+    "@rolldown/binding-linux-arm64-gnu": "1.2.7",
+    "@rolldown/binding-linux-x64-gnu": "1.2.7",
+    "lightningcss-linux-arm64-gnu": "1.33.0",
+    "lightningcss-linux-x64-gnu": "1.33.0"
+  },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "eslint": "10.10.0",
+    "jsdom": "28.1.0",
     "prettier": "3.9.6",
     "typescript": "6.0.3",
     "typescript-eslint": "8.69.0",

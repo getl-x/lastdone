@@ -217,6 +217,54 @@ a {
   color: var(--color-accent-strong);
 }
 
+.connectivity-banner {
+  position: sticky;
+  z-index: 15;
+  top: 0;
+  padding: 0.55rem 1rem;
+  background: #9b6b32;
+  color: white;
+  text-align: center;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.update-prompt {
+  position: fixed;
+  z-index: 45;
+  right: 1rem;
+  bottom: calc(82px + env(safe-area-inset-bottom));
+  left: 1rem;
+  display: flex;
+  max-width: 520px;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-left: auto;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-soft);
+}
+
+.update-prompt > div {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.update-prompt button {
+  min-height: 40px;
+  padding: 0.4rem 0.7rem;
+  border: 0;
+  border-radius: 8px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  cursor: pointer;
+  font-weight: 750;
+}
+
 .app-layout {
   min-height: 100vh;
 }
@@ -805,6 +853,10 @@ a {
   }
 
   .undo-toast {
+    bottom: 1.5rem;
+  }
+
+  .update-prompt {
     bottom: 1.5rem;
   }
 

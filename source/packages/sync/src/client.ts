@@ -15,7 +15,7 @@ export class HttpSyncTransport implements SyncTransport {
   constructor(options: HttpSyncTransportOptions) {
     this.#baseUrl = (options.baseUrl ?? "").replace(/\/$/, "");
     this.#getToken = options.getToken;
-    this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
   async push(operations: SyncOperation[]): Promise<PushResponse> {
