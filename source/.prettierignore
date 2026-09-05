@@ -1,0 +1,7 @@
+**/coverage
+**/dist
+**/node_modules
+apps/android
+package-lock.json
+server/pb_data
+server/pb_public

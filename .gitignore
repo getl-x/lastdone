@@ -8,6 +8,23 @@
 !/source/
 !/source/**
 
+# Generated dependencies, build output, runtime data, and local secrets are not
+# source code and must never be uploaded.
+/source/**/node_modules/
+/source/**/dist/
+/source/**/coverage/
+/source/**/.cache/
+/source/**/.vite/
+/source/**/.gradle/
+/source/**/build/
+/source/server/pb_data/
+/source/server/pb_public/
+/source/**/.env
+/source/**/.env.*
+!/source/**/.env.example
+/source/**/*.jks
+/source/**/*.keystore
+
 # Approved bilingual design documents.
 !/LASTDONE-DESIGN.en.md
 !/LASTDONE-DESIGN.zh-CN.md
