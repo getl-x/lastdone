@@ -129,6 +129,7 @@ func newOwnedCollection(name string, users *core.Collection) *core.Collection {
 			CollectionId:  users.Id,
 		},
 		&core.NumberField{Name: "revision", Required: true},
+		&core.JSONField{Name: "fieldRevisions", Required: true, MaxSize: 65536},
 		&core.DateField{Name: "deletedAt"},
 		&core.AutodateField{Name: "created", OnCreate: true},
 		&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true},
@@ -209,6 +210,9 @@ func newCompletionsCollection(users *core.Collection, items *core.Collection) *c
 		&core.DateField{Name: "completedAt", Required: true},
 		localDateField("localDate", true),
 		&core.TextField{Name: "note", Max: 500},
+		localDateField("previousDueDate", false),
+		localDateField("previousLastCompletedDate", false),
+		&core.TextField{Name: "previousLastCompletionId", Max: 15},
 	)
 	collection.AddIndex("idx_completions_item_time", false, "item, completedAt", "")
 	return collection
@@ -310,6 +314,8 @@ func newSyncChangesCollection(users *core.Collection) *core.Collection {
 		&core.NumberField{Name: "sequence", Required: true},
 		&core.TextField{Name: "entity", Required: true, Max: 64},
 		&core.TextField{Name: "entityId", Required: true, Max: 32},
+		&core.TextField{Name: "action", Required: true, Max: 16},
+		&core.NumberField{Name: "recordRevision", Required: true},
 		&core.JSONField{Name: "fields", MaxSize: 65536},
 	)
 	collection.AddIndex("idx_sync_changes_sequence", true, "sequence", "")
@@ -335,6 +341,7 @@ func newProcessedOperationsCollection(users *core.Collection) *core.Collection {
 func newSyncConflictsCollection(users *core.Collection) *core.Collection {
 	collection := newOwnedCollection("sync_conflicts", users)
 	collection.Fields.Add(
+		&core.TextField{Name: "conflictId", Required: true, Max: 255},
 		&core.TextField{Name: "operationId", Required: true, Max: 64},
 		&core.TextField{Name: "entity", Required: true, Max: 64},
 		&core.TextField{Name: "entityId", Required: true, Max: 32},
@@ -350,5 +357,6 @@ func newSyncConflictsCollection(users *core.Collection) *core.Collection {
 		},
 		&core.DateField{Name: "resolvedAt"},
 	)
+	collection.AddIndex("idx_sync_conflicts_id", true, "user, conflictId", "")
 	return collection
 }

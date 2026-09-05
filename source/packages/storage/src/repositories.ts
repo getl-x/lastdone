@@ -16,6 +16,8 @@ export interface RepositoryOptions {
   userId: string;
   now?: () => string;
   generateId?: IdGenerator;
+  generateRecordId?: IdGenerator;
+  generateOperationId?: IdGenerator;
 }
 
 export interface CreateItemInput {
@@ -44,6 +46,16 @@ export interface Repositories {
     undoCompletion(completionId: string): Promise<void>;
     archive(itemId: string): Promise<void>;
   };
+}
+
+const POCKETBASE_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+function generatePocketBaseId(): string {
+  const random = crypto.getRandomValues(new Uint8Array(15));
+  return Array.from(
+    random,
+    (value) => POCKETBASE_ID_ALPHABET[value % POCKETBASE_ID_ALPHABET.length],
+  ).join("");
 }
 
 const DEFAULT_CATEGORIES = [
@@ -125,7 +137,10 @@ export function createRepositories(
   options: RepositoryOptions,
 ): Repositories {
   const now = options.now ?? (() => new Date().toISOString());
-  const generateId = options.generateId ?? (() => crypto.randomUUID());
+  const generateRecordId =
+    options.generateRecordId ?? options.generateId ?? generatePocketBaseId;
+  const generateOperationId =
+    options.generateOperationId ?? options.generateId ?? (() => crypto.randomUUID());
 
   return {
     categories: {
@@ -143,7 +158,7 @@ export function createRepositories(
           for (const [displayOrder, definition] of DEFAULT_CATEGORIES.entries()) {
             const timestamp = now();
             const category: CategoryRecord = {
-              id: generateId(),
+              id: generateRecordId(),
               userId: options.userId,
               revision: 0,
               createdAt: timestamp,
@@ -157,7 +172,7 @@ export function createRepositories(
             await enqueueOperation(
               db,
               makeOperation(
-                generateId,
+                generateOperationId,
                 options.userId,
                 timestamp,
                 "categories",
@@ -176,7 +191,7 @@ export function createRepositories(
         const timestamp = now();
         const dates = resolveInitialDates(input);
         const item: ItemRecord = {
-          id: generateId(),
+          id: generateRecordId(),
           userId: options.userId,
           revision: 0,
           createdAt: timestamp,
@@ -201,7 +216,7 @@ export function createRepositories(
           await enqueueOperation(
             db,
             makeOperation(
-              generateId,
+              generateOperationId,
               options.userId,
               timestamp,
               "items",
@@ -228,7 +243,7 @@ export function createRepositories(
           const timestamp = now();
           const updatesProjection = completionUpdatesProjection(item, input);
           const completion: CompletionRecord = {
-            id: generateId(),
+            id: generateRecordId(),
             userId: options.userId,
             revision: 0,
             createdAt: timestamp,
@@ -247,7 +262,7 @@ export function createRepositories(
           await enqueueOperation(
             db,
             makeOperation(
-              generateId,
+              generateOperationId,
               options.userId,
               timestamp,
               "completions",
@@ -270,7 +285,7 @@ export function createRepositories(
             await enqueueOperation(
               db,
               makeOperation(
-                generateId,
+                generateOperationId,
                 options.userId,
                 timestamp,
                 "items",
@@ -314,7 +329,7 @@ export function createRepositories(
           await enqueueOperation(
             db,
             makeOperation(
-              generateId,
+              generateOperationId,
               options.userId,
               timestamp,
               "completions",
@@ -337,7 +352,7 @@ export function createRepositories(
             await enqueueOperation(
               db,
               makeOperation(
-                generateId,
+                generateOperationId,
                 options.userId,
                 timestamp,
                 "items",
@@ -368,7 +383,7 @@ export function createRepositories(
           await enqueueOperation(
             db,
             makeOperation(
-              generateId,
+              generateOperationId,
               options.userId,
               timestamp,
               "items",

@@ -21,5 +21,6 @@ export type {
   SkipRecord,
   SyncMetaRecord,
   SyncOperation,
+  SyncEntity,
   UserSettingsRecord,
 } from "./schema";
