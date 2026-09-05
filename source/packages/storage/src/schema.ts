@@ -50,8 +50,7 @@ export interface SkipRecord extends SyncRecord {
   note: string | null;
 }
 
-export interface UserSettingsRecord {
-  userId: string;
+export interface UserSettingsRecord extends SyncRecord {
   timeZone: string;
   dueSoonDays: number;
   digestTime: string;

@@ -7,10 +7,12 @@ export {
 export { createRepositories } from "./repositories";
 export type {
   CompleteItemInput,
+  CreateCategoryInput,
   CreateItemInput,
   IdGenerator,
   Repositories,
   RepositoryOptions,
+  UpdateItemInput,
 } from "./repositories";
 export type {
   CategoryRecord,

@@ -16,6 +16,7 @@ export interface AuthClient {
   currentUser(): AuthUser | null;
   login(username: string, password: string): Promise<AuthUser>;
   logout(): void | Promise<void>;
+  changePassword?(currentPassword: string, newPassword: string): Promise<void>;
   isOffline?(): boolean;
 }
 
@@ -27,6 +28,7 @@ interface AuthContextValue {
   status: AuthStatus;
   login(username: string, password: string): Promise<void>;
   logout(): Promise<void>;
+  changePassword(currentPassword: string, newPassword: string): Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -65,9 +67,19 @@ export function AuthProvider({
     setStatus("unauthenticated");
   }, [client]);
 
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      if (!client.changePassword) {
+        throw new Error("password change is not available");
+      }
+      await client.changePassword(currentPassword, newPassword);
+    },
+    [client],
+  );
+
   const value = useMemo(
-    () => ({ user, status, login, logout }),
-    [login, logout, status, user],
+    () => ({ user, status, login, logout, changePassword }),
+    [changePassword, login, logout, status, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

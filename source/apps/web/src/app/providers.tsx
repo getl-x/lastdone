@@ -1,7 +1,15 @@
 import PocketBase, { type RecordModel } from "pocketbase";
 import { useMemo, type PropsWithChildren } from "react";
 
-import { AuthProvider, type AuthClient, type AuthUser } from "../auth/AuthProvider";
+import { HttpSyncTransport, type SyncTransport } from "@lastdone/sync";
+
+import {
+  AuthProvider,
+  useAuth,
+  type AuthClient,
+  type AuthUser,
+} from "../auth/AuthProvider";
+import { DataProvider } from "../data/DataProvider";
 
 function toUser(record: RecordModel | null): AuthUser | null {
   if (!record) {
@@ -10,8 +18,7 @@ function toUser(record: RecordModel | null): AuthUser | null {
   return { id: record.id, username: String(record.username ?? "") };
 }
 
-function createPocketBaseAuthClient(): AuthClient {
-  const pocketBase = new PocketBase(window.location.origin);
+function createPocketBaseAuthClient(pocketBase: PocketBase): AuthClient {
   return {
     currentUser: () => toUser(pocketBase.authStore.record),
     async login(username, password) {
@@ -25,11 +32,51 @@ function createPocketBaseAuthClient(): AuthClient {
       return user;
     },
     logout: () => pocketBase.authStore.clear(),
+    async changePassword(currentPassword, newPassword) {
+      const userId = pocketBase.authStore.record?.id;
+      if (!userId) {
+        throw new Error("not authenticated");
+      }
+      await pocketBase.collection("users").update(userId, {
+        oldPassword: currentPassword,
+        password: newPassword,
+        passwordConfirm: newPassword,
+      });
+    },
     isOffline: () => !navigator.onLine,
   };
 }
 
 export function AppProviders({ children }: PropsWithChildren) {
-  const authClient = useMemo(() => createPocketBaseAuthClient(), []);
-  return <AuthProvider client={authClient}>{children}</AuthProvider>;
+  const pocketBase = useMemo(() => new PocketBase(window.location.origin), []);
+  const authClient = useMemo(
+    () => createPocketBaseAuthClient(pocketBase),
+    [pocketBase],
+  );
+  const syncTransport = useMemo(
+    () =>
+      new HttpSyncTransport({
+        getToken: () => pocketBase.authStore.token || null,
+      }),
+    [pocketBase],
+  );
+  return (
+    <AuthProvider client={authClient}>
+      <AuthenticatedData syncTransport={syncTransport}>{children}</AuthenticatedData>
+    </AuthProvider>
+  );
+}
+
+function AuthenticatedData({
+  children,
+  syncTransport,
+}: PropsWithChildren<{ syncTransport: SyncTransport }>) {
+  const { user } = useAuth();
+  return user ? (
+    <DataProvider userId={user.id} syncTransport={syncTransport}>
+      {children}
+    </DataProvider>
+  ) : (
+    children
+  );
 }

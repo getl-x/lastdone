@@ -28,12 +28,12 @@ export class LastDoneDatabase extends Dexie {
 
     this.version(1).stores({
       categories:
-        "&id,userId,displayOrder,[userId+displayOrder],lifecycle,updatedAt,deletedAt",
+        "&id,userId,name,displayOrder,[userId+displayOrder],lifecycle,updatedAt,deletedAt",
       items: "&id,userId,categoryId,dueDate,lifecycle,important,updatedAt,deletedAt",
       completions:
         "&id,userId,itemId,[itemId+completedAt],localDate,updatedAt,deletedAt",
       skips: "&id,userId,itemId,[itemId+occurrenceDate],updatedAt,deletedAt",
-      settings: "&userId,updatedAt",
+      settings: "&userId,id,revision,updatedAt,deletedAt",
       devices: "&id,userId,platform,lastSeenAt,deletedAt",
       outbox: "&id,userId,status,createdAt,[status+createdAt],entity,entityId",
       syncMeta: "&userId,lastSequence",

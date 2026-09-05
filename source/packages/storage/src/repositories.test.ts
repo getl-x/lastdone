@@ -154,4 +154,78 @@ describe("offline repositories", () => {
     expect((await db.items.get(item.id))?.lifecycle).toBe("archived");
     expect(await db.completions.where("itemId").equals(item.id).count()).toBe(1);
   });
+
+  it("pauses, restores, skips a fixed occurrence, and tombstones an item", async () => {
+    const repositories = createRepositories(db, {
+      userId: USER_ID,
+      now: () => NOW,
+      generateId: sequentialIds(),
+    });
+    const item = await repositories.items.create({
+      name: "检查车辆",
+      categoryId: "category-vehicle",
+      schedule: { type: "fixed-monthly", day: 31 },
+      initialDueDate: "2026-09-30",
+      important: false,
+      reminderOffsets: [],
+    });
+
+    await repositories.items.pause(item.id);
+    expect((await db.items.get(item.id))?.lifecycle).toBe("paused");
+    await repositories.items.restore(item.id);
+    expect((await db.items.get(item.id))?.lifecycle).toBe("active");
+
+    await repositories.items.skip(item.id, "2026-09-30", "本月不检查");
+    expect((await db.items.get(item.id))?.dueDate).toBe("2026-10-31");
+    expect((await db.skips.where("itemId").equals(item.id).first())?.note).toBe(
+      "本月不检查",
+    );
+
+    await repositories.items.remove(item.id);
+    expect((await db.items.get(item.id))?.deletedAt).toBe(NOW);
+  });
+
+  it("rejects skipping a completion-relative schedule", async () => {
+    const repositories = createRepositories(db, {
+      userId: USER_ID,
+      now: () => NOW,
+      generateId: sequentialIds(),
+    });
+    const item = await repositories.items.create({
+      name: "备份电脑",
+      categoryId: "category-digital",
+      schedule: { type: "relative", every: 30, unit: "days" },
+      initialDueDate: "2026-09-30",
+      important: false,
+      reminderOffsets: [],
+    });
+
+    await expect(repositories.items.skip(item.id, "2026-09-30")).rejects.toThrow(
+      "relative schedules cannot be skipped",
+    );
+  });
+
+  it("creates settings on first save and updates them with revisions", async () => {
+    const repositories = createRepositories(db, {
+      userId: USER_ID,
+      now: () => NOW,
+      generateId: sequentialIds(),
+    });
+
+    const first = await repositories.settings.update({ dueSoonDays: 10 });
+    const second = await repositories.settings.update({ digestTime: "08:30" });
+
+    expect(first.revision).toBe(1);
+    expect(second).toMatchObject({ revision: 2, dueSoonDays: 10, digestTime: "08:30" });
+    const operations = await db.outbox
+      .where("entity")
+      .equals("settings")
+      .sortBy("createdAt");
+    expect(
+      operations.map(({ action, baseRevision }) => ({ action, baseRevision })),
+    ).toEqual([
+      { action: "create", baseRevision: 0 },
+      { action: "update", baseRevision: 1 },
+    ]);
+  });
 });

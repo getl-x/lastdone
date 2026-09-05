@@ -6,8 +6,10 @@ import type {
   CategoryRecord,
   CompletionRecord,
   ItemRecord,
+  SkipRecord,
   SyncEntity,
   SyncOperation,
+  UserSettingsRecord,
 } from "./schema";
 
 export type IdGenerator = () => string;
@@ -36,15 +38,47 @@ export interface CompleteItemInput {
   note?: string;
 }
 
+export interface CreateCategoryInput {
+  name: string;
+  icon: string;
+  color: string;
+}
+
+export interface UpdateItemInput {
+  name?: string;
+  categoryId?: string;
+  schedule?: ScheduleRule;
+  dueDate?: string | null;
+  important?: boolean;
+  reminderOffsets?: number[];
+}
+
 export interface Repositories {
   categories: {
     ensureDefaults(): Promise<void>;
+    create(input: CreateCategoryInput): Promise<CategoryRecord>;
+    update(
+      categoryId: string,
+      patch: Partial<Pick<CategoryRecord, "name" | "icon" | "color" | "displayOrder">>,
+    ): Promise<void>;
+    setArchived(categoryId: string, archived: boolean): Promise<void>;
   };
   items: {
     create(input: CreateItemInput): Promise<ItemRecord>;
+    update(itemId: string, patch: UpdateItemInput): Promise<void>;
     complete(itemId: string, input: CompleteItemInput): Promise<CompletionRecord>;
     undoCompletion(completionId: string): Promise<void>;
     archive(itemId: string): Promise<void>;
+    pause(itemId: string): Promise<void>;
+    restore(itemId: string): Promise<void>;
+    remove(itemId: string): Promise<void>;
+    skip(itemId: string, occurrenceDate: string, note?: string): Promise<SkipRecord>;
+  };
+  settings: {
+    ensureDefaults(): Promise<UserSettingsRecord>;
+    update(
+      patch: Partial<Omit<UserSettingsRecord, "userId" | "updatedAt">>,
+    ): Promise<UserSettingsRecord>;
   };
 }
 
@@ -132,6 +166,10 @@ function dueDateAfterCompletion(item: ItemRecord, localDate: string): string {
   return nextDueDate(item.schedule, baseline);
 }
 
+function toOperationFields(value: object): Record<string, unknown> {
+  return { ...value };
+}
+
 export function createRepositories(
   db: LastDoneDatabase,
   options: RepositoryOptions,
@@ -145,16 +183,15 @@ export function createRepositories(
   return {
     categories: {
       async ensureDefaults() {
-        const existingCount = await db.categories
-          .where("userId")
-          .equals(options.userId)
-          .count();
-
-        if (existingCount > 0) {
-          return;
-        }
-
         await db.transaction("rw", db.categories, db.outbox, async () => {
+          const existingCount = await db.categories
+            .where("userId")
+            .equals(options.userId)
+            .count();
+          if (existingCount > 0) {
+            return;
+          }
+
           for (const [displayOrder, definition] of DEFAULT_CATEGORIES.entries()) {
             const timestamp = now();
             const category: CategoryRecord = {
@@ -183,6 +220,109 @@ export function createRepositories(
               ),
             );
           }
+        });
+      },
+      async create(input) {
+        const timestamp = now();
+        const highest = await db.categories
+          .where("userId")
+          .equals(options.userId)
+          .sortBy("displayOrder");
+        const category: CategoryRecord = {
+          id: generateRecordId(),
+          userId: options.userId,
+          revision: 0,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          deletedAt: null,
+          name: input.name.trim(),
+          icon: input.icon,
+          color: input.color,
+          displayOrder:
+            (highest.length > 0 ? highest[highest.length - 1]!.displayOrder : -1) + 1,
+          lifecycle: "active",
+        };
+        if (!category.name) {
+          throw new Error("category name is required");
+        }
+        await db.transaction("rw", db.categories, db.outbox, async () => {
+          await db.categories.add(category);
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "categories",
+              category.id,
+              "create",
+              0,
+              toOperationFields(category),
+            ),
+          );
+        });
+        return category;
+      },
+      async update(categoryId, requestedPatch) {
+        await db.transaction("rw", db.categories, db.outbox, async () => {
+          const category = await db.categories.get(categoryId);
+          if (!category || category.deletedAt) {
+            throw new Error(`category not found: ${categoryId}`);
+          }
+          const timestamp = now();
+          const patch = {
+            ...requestedPatch,
+            revision: category.revision + 1,
+            updatedAt: timestamp,
+          };
+          if (typeof patch.name === "string") {
+            patch.name = patch.name.trim();
+            if (!patch.name) {
+              throw new Error("category name is required");
+            }
+          }
+          await db.categories.update(categoryId, patch);
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "categories",
+              categoryId,
+              "update",
+              category.revision,
+              patch,
+            ),
+          );
+        });
+      },
+      async setArchived(categoryId, archived) {
+        await db.transaction("rw", db.categories, db.outbox, async () => {
+          const category = await db.categories.get(categoryId);
+          if (!category) {
+            throw new Error(`category not found: ${categoryId}`);
+          }
+          const timestamp = now();
+          const patch = {
+            lifecycle: archived ? ("archived" as const) : ("active" as const),
+            revision: category.revision + 1,
+            updatedAt: timestamp,
+          };
+          await db.categories.update(categoryId, patch);
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "categories",
+              categoryId,
+              "update",
+              category.revision,
+              patch,
+            ),
+          );
         });
       },
     },
@@ -229,6 +369,42 @@ export function createRepositories(
         });
 
         return item;
+      },
+
+      async update(itemId, requestedPatch) {
+        await db.transaction("rw", db.items, db.outbox, async () => {
+          const item = await db.items.get(itemId);
+          if (!item || item.deletedAt) {
+            throw new Error(`item not found: ${itemId}`);
+          }
+          const timestamp = now();
+          const patch: Partial<ItemRecord> = {
+            ...requestedPatch,
+            revision: item.revision + 1,
+            updatedAt: timestamp,
+          };
+          if (typeof requestedPatch.name === "string") {
+            const name = requestedPatch.name.trim();
+            if (!name) {
+              throw new Error("item name is required");
+            }
+            patch.name = name;
+          }
+          await db.items.update(itemId, patch);
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "items",
+              itemId,
+              "update",
+              item.revision,
+              toOperationFields(patch),
+            ),
+          );
+        });
       },
 
       async complete(itemId, input) {
@@ -394,6 +570,205 @@ export function createRepositories(
             ),
           );
         });
+      },
+
+      async pause(itemId) {
+        await db.transaction("rw", db.items, db.outbox, async () => {
+          const current = await db.items.get(itemId);
+          if (!current) {
+            throw new Error(`item not found: ${itemId}`);
+          }
+          const timestamp = now();
+          const patch = {
+            lifecycle: "paused" as const,
+            revision: current.revision + 1,
+            updatedAt: timestamp,
+          };
+          await db.items.update(itemId, patch);
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "items",
+              itemId,
+              "update",
+              current.revision,
+              patch,
+            ),
+          );
+        });
+      },
+
+      async restore(itemId) {
+        const item = await db.items.get(itemId);
+        if (!item || item.deletedAt) {
+          throw new Error(`item not found: ${itemId}`);
+        }
+        const timestamp = now();
+        const patch = {
+          lifecycle: "active" as const,
+          revision: item.revision + 1,
+          updatedAt: timestamp,
+        };
+        await db.transaction("rw", db.items, db.outbox, async () => {
+          await db.items.update(itemId, patch);
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "items",
+              itemId,
+              "update",
+              item.revision,
+              patch,
+            ),
+          );
+        });
+      },
+
+      async remove(itemId) {
+        const item = await db.items.get(itemId);
+        if (!item || item.deletedAt) {
+          throw new Error(`item not found: ${itemId}`);
+        }
+        const timestamp = now();
+        const patch = {
+          deletedAt: timestamp,
+          revision: item.revision + 1,
+          updatedAt: timestamp,
+        };
+        await db.transaction("rw", db.items, db.outbox, async () => {
+          await db.items.update(itemId, patch);
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "items",
+              itemId,
+              "delete",
+              item.revision,
+              patch,
+            ),
+          );
+        });
+      },
+
+      async skip(itemId, occurrenceDate, note) {
+        const item = await db.items.get(itemId);
+        if (!item || item.deletedAt) {
+          throw new Error(`item not found: ${itemId}`);
+        }
+        if (item.schedule.type === "relative") {
+          throw new Error("relative schedules cannot be skipped");
+        }
+        const timestamp = now();
+        const skip: SkipRecord = {
+          id: generateRecordId(),
+          userId: options.userId,
+          revision: 0,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          deletedAt: null,
+          itemId,
+          occurrenceDate,
+          note: note?.trim() || null,
+        };
+        const itemPatch = {
+          dueDate: nextDueDate(item.schedule, occurrenceDate),
+          revision: item.revision + 1,
+          updatedAt: timestamp,
+        };
+        await db.transaction("rw", db.items, db.skips, db.outbox, async () => {
+          await db.skips.add(skip);
+          await db.items.update(itemId, itemPatch);
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "skips",
+              skip.id,
+              "create",
+              0,
+              toOperationFields(skip),
+            ),
+          );
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "items",
+              itemId,
+              "update",
+              item.revision,
+              itemPatch,
+            ),
+          );
+        });
+        return skip;
+      },
+    },
+    settings: {
+      async ensureDefaults() {
+        return db.transaction("rw", db.settings, async () => {
+          const existing = await db.settings.get(options.userId);
+          if (existing) {
+            return existing;
+          }
+          const timestamp = now();
+          const settings: UserSettingsRecord = {
+            id: options.userId,
+            userId: options.userId,
+            revision: 0,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            deletedAt: null,
+            timeZone: "Asia/Shanghai",
+            dueSoonDays: 7,
+            digestTime: "09:00",
+            quietHoursStart: "22:00",
+            quietHoursEnd: "08:00",
+          };
+          await db.settings.add(settings);
+          return settings;
+        });
+      },
+      async update(requestedPatch) {
+        const current = await this.ensureDefaults();
+        const timestamp = now();
+        const settings: UserSettingsRecord = {
+          ...current,
+          ...requestedPatch,
+          userId: options.userId,
+          revision: current.revision + 1,
+          updatedAt: timestamp,
+        };
+        await db.transaction("rw", db.settings, db.outbox, async () => {
+          await db.settings.put(settings);
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "settings",
+              options.userId,
+              current.revision === 0 ? "create" : "update",
+              current.revision,
+              toOperationFields(settings),
+            ),
+          );
+        });
+        return settings;
       },
     },
   };

@@ -3,17 +3,12 @@ import { Navigate, Outlet, createBrowserRouter, useLocation } from "react-router
 
 import { useAuth } from "../auth/AuthProvider";
 import { LoginPage } from "../auth/LoginPage";
+import { CategoriesPage } from "../categories/CategoriesPage";
+import { DashboardPage } from "../dashboard/DashboardPage";
+import { ItemDetailPage } from "../items/ItemDetailPage";
+import { ItemFormPage } from "../items/ItemFormPage";
 import { AppShell } from "../layout/AppShell";
-
-function PlaceholderPage({ title, copy }: { title: string; copy: string }) {
-  return (
-    <section className="placeholder-page">
-      <p className="eyebrow">LASTDONE</p>
-      <h1>{title}</h1>
-      <p>{copy}</p>
-    </section>
-  );
-}
+import { SettingsPage } from "../settings/SettingsPage";
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -42,30 +37,21 @@ export const router = createBrowserRouter([
     children: [
       {
         path: "/",
-        element: (
-          <PlaceholderPage
-            title="今天要留意什么？"
-            copy="逾期、今天到期和即将到期的事项会显示在这里。"
-          />
-        ),
+        element: <DashboardPage />,
       },
+      { path: "/items/new", element: <ItemFormPage /> },
       {
         path: "/items/:id",
-        element: (
-          <PlaceholderPage title="事项详情" copy="查看周期、下次日期和完成记录。" />
-        ),
+        element: <ItemDetailPage />,
       },
+      { path: "/items/:id/edit", element: <ItemFormPage /> },
       {
         path: "/categories",
-        element: (
-          <PlaceholderPage title="分类" copy="整理健康、家居、设备等重复事项。" />
-        ),
+        element: <CategoriesPage />,
       },
       {
         path: "/settings",
-        element: (
-          <PlaceholderPage title="设置" copy="管理同步、提醒、导入导出和账户。" />
-        ),
+        element: <SettingsPage />,
       },
     ],
   },
