@@ -46,7 +46,7 @@ func TestPocketBaseStorePersistsOperationAndChangeAtomically(t *testing.T) {
 			"name":         "家居",
 			"icon":         "house",
 			"color":        "#B57B46",
-			"displayOrder": 1,
+			"displayOrder": 0,
 			"lifecycle":    "active",
 			"deletedAt":    nil,
 		},

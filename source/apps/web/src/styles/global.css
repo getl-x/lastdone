@@ -160,6 +160,9 @@ a {
 .field input,
 .field select,
 .field textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 50px;
   padding: 0.78rem 0.95rem;
   border: 1px solid var(--color-border);
@@ -648,6 +651,7 @@ a {
 .surface-card,
 .danger-zone,
 .detail-hero {
+  min-width: 0;
   padding: clamp(1rem, 4vw, 1.5rem);
   border: 1px solid var(--color-border);
   border-radius: 20px;
@@ -804,6 +808,7 @@ a {
 .detail-grid,
 .settings-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -994,6 +999,19 @@ a {
 .settings-page {
   display: grid;
   gap: 0.9rem;
+}
+
+.settings-page,
+.settings-grid,
+.settings-grid > *,
+.settings-page form,
+.settings-page .field-row,
+.settings-page .field {
+  min-width: 0;
+}
+
+.settings-page {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .sync-status {

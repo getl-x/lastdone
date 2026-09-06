@@ -362,6 +362,33 @@ describe("offline repositories", () => {
     ]);
   });
 
+  it("registers a device session for synchronization once", async () => {
+    const repositories = createRepositories(db, {
+      userId: USER_ID,
+      now: () => NOW,
+      generateId: sequentialIds(),
+    });
+    const input = {
+      id: "device000000001",
+      name: "Android 手机",
+      platform: "android" as const,
+      digestEnabled: false,
+      importantRemindersEnabled: true,
+    };
+
+    const first = await repositories.devices.register(input);
+    const second = await repositories.devices.register(input);
+
+    expect(second).toEqual(first);
+    expect(await db.devices.get(input.id)).toEqual(first);
+    expect(await db.outbox.where("entity").equals("devices").count()).toBe(1);
+    expect(await db.outbox.where("entity").equals("devices").first()).toMatchObject({
+      entityId: input.id,
+      action: "create",
+      baseRevision: 0,
+    });
+  });
+
   it("uses the same default settings operation id on every device", async () => {
     const otherDb = new LastDoneDatabase(`lastdone-settings-${crypto.randomUUID()}`);
     try {

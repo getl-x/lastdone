@@ -131,6 +131,40 @@ func TestSubscribeCreatesOwnedDeviceAndSubscription(t *testing.T) {
 	}).Test(t)
 }
 
+func TestSubscribeRecreatesDeviceMissingFromServer(t *testing.T) {
+	headers := map[string]string{}
+	(&tests.ApiScenario{
+		Name:   "recreates a device whose browser id outlived server data",
+		Method: http.MethodPost,
+		URL:    "/api/lastdone/push/subscribe",
+		Body: strings.NewReader(`{
+			"deviceId":"device000000001",
+			"deviceName":"Desktop",
+			"platform":"web",
+			"digestEnabled":false,
+			"importantRemindersEnabled":false,
+			"subscription":{
+				"endpoint":"https://push.example/recreated-desktop",
+				"keys":{"p256dh":"public-key","auth":"auth-secret"}
+			}
+		}`),
+		Headers:         headers,
+		ExpectedStatus:  http.StatusOK,
+		ExpectedContent: []string{`"deviceId":"device000000001"`, `"enabled":true`},
+		TestAppFactory:  notificationRouteFactory(headers, nil),
+		BeforeTestFunc:  registerNotificationTestRoutes,
+		AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+			device, err := app.FindRecordById("devices", "device000000001")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if device.GetString("name") != "Desktop" {
+				t.Fatalf("unexpected recreated device: %#v", device)
+			}
+		},
+	}).Test(t)
+}
+
 func TestNotificationPreferencesAndUnsubscribeUpdateOwnedDevice(t *testing.T) {
 	seed := func(t testing.TB, app *tests.TestApp, user *core.Record) {
 		device := saveOwnedRecord(t, app, "devices", "device000000001", user.Id, map[string]any{

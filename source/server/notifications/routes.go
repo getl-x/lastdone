@@ -141,9 +141,6 @@ func subscribe(app core.App, userID string, body subscribeRequest, now time.Time
 	var state deviceState
 	err := app.RunInTransaction(func(transactionApp core.App) error {
 		device, err := findOwnedDevice(transactionApp, userID, body.DeviceID)
-		if errors.Is(err, sql.ErrNoRows) && body.DeviceID != "" {
-			return err
-		}
 		if errors.Is(err, sql.ErrNoRows) {
 			device = nil
 		} else if err != nil {
@@ -177,6 +174,9 @@ func subscribe(app core.App, userID string, body subscribeRequest, now time.Time
 				return findErr
 			}
 			device = core.NewRecord(collection)
+			if body.DeviceID != "" {
+				device.Id = body.DeviceID
+			}
 			device.Set("user", userID)
 			device.Set("revision", 1)
 			device.Set("fieldRevisions", map[string]int{

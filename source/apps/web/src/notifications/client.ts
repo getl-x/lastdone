@@ -79,6 +79,36 @@ interface ServerDeviceState extends NotificationPreferences {
 }
 
 const DEVICE_ID_KEY = "lastdone_device_id";
+const POCKETBASE_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+const POCKETBASE_ID_PATTERN = /^[a-z0-9]{15}$/;
+
+class NotificationRequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export class BrowserPushSetupError extends Error {}
+
+function makeDeviceId(): string {
+  return Array.from(
+    crypto.getRandomValues(new Uint8Array(15)),
+    (value) => POCKETBASE_ID_ALPHABET[value % POCKETBASE_ID_ALPHABET.length],
+  ).join("");
+}
+
+export function getOrCreateBrowserDeviceId(
+  storage: Pick<Storage, "getItem" | "setItem"> = localStorage,
+): string {
+  const existing = storage.getItem(DEVICE_ID_KEY);
+  if (existing && POCKETBASE_ID_PATTERN.test(existing)) return existing;
+  const deviceId = makeDeviceId();
+  storage.setItem(DEVICE_ID_KEY, deviceId);
+  return deviceId;
+}
 
 export function notificationDefaults(
   platform: NotificationPlatform,
@@ -133,6 +163,16 @@ export function createBrowserPushRuntime(): PushRuntime {
   };
 }
 
+function browserPushFailure(cause: unknown): BrowserPushSetupError {
+  const brave = typeof navigator !== "undefined" && "brave" in navigator;
+  const message = brave
+    ? "Brave 未能连接推送服务。请在 Brave 设置 → 隐私和安全中开启“使用 Google 服务进行推送消息”，重启浏览器后重试。"
+    : "浏览器未能创建推送订阅，请确认浏览器的推送服务已开启后重试。";
+  const error = new BrowserPushSetupError(message);
+  if (cause instanceof Error) error.stack = `${error.stack}\nCaused by: ${cause.stack}`;
+  return error;
+}
+
 export class BrowserNotificationClient implements NotificationClient {
   readonly #getToken: () => string | null;
   readonly #fetch: typeof globalThis.fetch;
@@ -163,10 +203,17 @@ export class BrowserNotificationClient implements NotificationClient {
     if (!subscription || !deviceId) {
       return { status: "disabled" as const, platform: this.#runtime.platform };
     }
-    const state = await this.#request<ServerDeviceState>(
-      `/api/lastdone/push/status?deviceId=${encodeURIComponent(deviceId)}`,
-    );
-    return this.#withStatus(state);
+    try {
+      const state = await this.#request<ServerDeviceState>(
+        `/api/lastdone/push/status?deviceId=${encodeURIComponent(deviceId)}`,
+      );
+      return this.#withStatus(state);
+    } catch (cause) {
+      if (cause instanceof NotificationRequestError && cause.status === 404) {
+        return { status: "disabled" as const, platform: this.#runtime.platform };
+      }
+      throw cause;
+    }
   }
 
   async enable(preferences = notificationDefaults(this.#runtime.platform)) {
@@ -184,18 +231,24 @@ export class BrowserNotificationClient implements NotificationClient {
     const config = await this.#request<{ publicKey: string }>(
       "/api/lastdone/push/config",
     );
-    const subscription =
-      (await this.#runtime.getSubscription()) ??
-      (await this.#runtime.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: decodeBase64Url(config.publicKey),
-      }));
+    let subscription: PushSubscriptionLike;
+    try {
+      subscription =
+        (await this.#runtime.getSubscription()) ??
+        (await this.#runtime.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: decodeBase64Url(config.publicKey),
+        }));
+    } catch (cause) {
+      throw browserPushFailure(cause);
+    }
+    const deviceId = getOrCreateBrowserDeviceId(this.#storage);
     const state = await this.#request<ServerDeviceState>(
       "/api/lastdone/push/subscribe",
       {
         method: "POST",
         body: JSON.stringify({
-          deviceId: this.#storage.getItem(DEVICE_ID_KEY) ?? undefined,
+          deviceId,
           deviceName: this.#runtime.deviceName,
           platform: this.#runtime.platform,
           ...preferences,
@@ -265,7 +318,10 @@ export class BrowserNotificationClient implements NotificationClient {
       },
     });
     if (!response.ok) {
-      throw new Error(`notification request failed with status ${response.status}`);
+      throw new NotificationRequestError(
+        response.status,
+        `notification request failed with status ${response.status}`,
+      );
     }
     return response.json() as Promise<T>;
   }

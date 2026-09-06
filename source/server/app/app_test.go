@@ -16,7 +16,7 @@ func TestHealthRoute(t *testing.T) {
 		ExpectedContent: []string{
 			`"status":"ok"`,
 			`"appVersion":"test-version"`,
-			`"databaseVersion":"202609050002"`,
+			`"databaseVersion":"202609060001"`,
 		},
 		TestAppFactory: func(t testing.TB) *tests.TestApp {
 			t.Helper()

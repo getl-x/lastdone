@@ -5,6 +5,7 @@ import { enqueueOperation } from "./outbox";
 import type {
   CategoryRecord,
   CompletionRecord,
+  DeviceRecord,
   ItemRecord,
   SkipRecord,
   SyncEntity,
@@ -53,6 +54,14 @@ export interface UpdateItemInput {
   reminderOffsets?: number[];
 }
 
+export interface RegisterDeviceInput {
+  id: string;
+  name: string;
+  platform: DeviceRecord["platform"];
+  digestEnabled: boolean;
+  importantRemindersEnabled: boolean;
+}
+
 export interface Repositories {
   categories: {
     ensureDefaults(): Promise<void>;
@@ -80,6 +89,9 @@ export interface Repositories {
     update(
       patch: Partial<Omit<UserSettingsRecord, "userId" | "updatedAt">>,
     ): Promise<UserSettingsRecord>;
+  };
+  devices: {
+    register(input: RegisterDeviceInput): Promise<DeviceRecord>;
   };
 }
 
@@ -809,6 +821,50 @@ export function createRepositories(
           );
         });
         return skip;
+      },
+    },
+    devices: {
+      async register(input) {
+        return db.transaction("rw", db.devices, db.outbox, async () => {
+          const existing = await db.devices.get(input.id);
+          const existingOperation = await db.outbox
+            .where("entityId")
+            .equals(input.id)
+            .filter((operation) => operation.entity === "devices")
+            .first();
+          if (existing && existingOperation) return existing;
+
+          const timestamp = now();
+          const device: DeviceRecord = {
+            id: input.id,
+            userId: options.userId,
+            revision: existing ? existing.revision + 1 : 1,
+            createdAt: existing?.createdAt ?? timestamp,
+            updatedAt: timestamp,
+            deletedAt: null,
+            name: input.name,
+            platform: input.platform,
+            digestEnabled: existing?.digestEnabled ?? input.digestEnabled,
+            importantRemindersEnabled:
+              existing?.importantRemindersEnabled ?? input.importantRemindersEnabled,
+            lastSeenAt: timestamp,
+          };
+          await db.devices.put(device);
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "devices",
+              device.id,
+              "create",
+              existing?.revision ?? 0,
+              toOperationFields(device),
+            ),
+          );
+          return device;
+        });
       },
     },
     settings: {

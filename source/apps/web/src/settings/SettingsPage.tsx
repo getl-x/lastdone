@@ -17,6 +17,7 @@ import type {
   NotificationPlatform,
   NotificationPreferences,
 } from "../notifications/client";
+import { BrowserPushSetupError } from "../notifications/client";
 import { useNotifications } from "../notifications/NotificationProvider";
 import {
   buildImportPlan,
@@ -121,25 +122,6 @@ export function SettingsPage() {
     try {
       const values = await notifications.listDevices();
       setNotificationDevices(values);
-      const timestamp = new Date().toISOString();
-      await db.transaction("rw", db.devices, async () => {
-        for (const value of values) {
-          const existing = await db.devices.get(value.deviceId);
-          await db.devices.put({
-            id: value.deviceId,
-            userId,
-            revision: existing?.revision ?? 1,
-            createdAt: existing?.createdAt ?? timestamp,
-            updatedAt: timestamp,
-            deletedAt: null,
-            name: value.deviceName,
-            platform: value.platform,
-            digestEnabled: value.digestEnabled,
-            importantRemindersEnabled: value.importantRemindersEnabled,
-            lastSeenAt: timestamp,
-          });
-        }
-      });
     } catch {
       const cached = await db.devices.where("userId").equals(userId).toArray();
       setNotificationDevices(
@@ -303,8 +285,12 @@ export function SettingsPage() {
       const state = await notifications.enable();
       setNotificationState(state);
       await refreshNotificationDevices();
-    } catch {
-      setNotificationError("通知启用失败，请确认网络连接后重试。");
+    } catch (cause) {
+      setNotificationError(
+        cause instanceof BrowserPushSetupError
+          ? cause.message
+          : "通知启用失败，请确认网络连接后重试。",
+      );
     } finally {
       setNotificationBusy(false);
     }

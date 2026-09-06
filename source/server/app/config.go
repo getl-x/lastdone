@@ -2,7 +2,7 @@ package app
 
 import "os"
 
-const DatabaseVersion = "202609050002"
+const DatabaseVersion = "202609060001"
 
 type Config struct {
 	DataDir      string

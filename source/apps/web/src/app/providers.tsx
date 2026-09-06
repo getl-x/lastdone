@@ -10,6 +10,7 @@ import {
   type AuthUser,
 } from "../auth/AuthProvider";
 import { DataProvider } from "../data/DataProvider";
+import { DeviceSessionRegistrar } from "../data/DeviceSessionRegistrar";
 import { AndroidNotificationClient } from "../native/androidNotificationClient";
 import { AndroidNotificationCoordinator } from "../native/AndroidNotificationCoordinator";
 import { clearAndroidNotifications } from "../native/androidNotificationScheduler";
@@ -115,6 +116,7 @@ function AuthenticatedData({
 
   return user ? (
     <DataProvider userId={user.id} syncTransport={syncTransport}>
+      <DeviceSessionRegistrar isAndroid={isAndroid} />
       {isAndroid ? <AndroidNotificationCoordinator /> : null}
       {children}
     </DataProvider>

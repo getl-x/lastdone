@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  BrowserPushSetupError,
   BrowserNotificationClient,
   notificationDefaults,
   type PushRuntime,
@@ -88,6 +89,7 @@ describe("notification client", () => {
     expect(requests).toHaveLength(2);
     expect(requests[1]?.init?.headers).toMatchObject({ Authorization: "auth-token" });
     expect(JSON.parse(String(requests[1]?.init?.body))).toMatchObject({
+      deviceId: expect.stringMatching(/^[a-z0-9]{15}$/),
       deviceName: "iPhone PWA",
       platform: "ios-pwa",
       digestEnabled: true,
@@ -96,6 +98,43 @@ describe("notification client", () => {
     });
     expect(state).toMatchObject({ status: "enabled", deviceId: "device000000001" });
     expect(localStorage.getItem("lastdone_device_id")).toBe("device000000001");
+  });
+
+  it("treats a device id missing from the server as disabled", async () => {
+    localStorage.setItem("lastdone_device_id", "device000000001");
+    const browser = runtime({
+      permission: () => "granted",
+      getSubscription: vi.fn(async () => subscription()),
+    });
+    const client = new BrowserNotificationClient({
+      getToken: () => "auth-token",
+      fetch: vi.fn(async () => Response.json({}, { status: 404 })),
+      runtime: browser,
+      storage: localStorage,
+    });
+
+    await expect(client.inspect()).resolves.toEqual({
+      status: "disabled",
+      platform: "ios-pwa",
+    });
+  });
+
+  it("returns actionable guidance when the browser push service is unavailable", async () => {
+    const browser = runtime({
+      permission: () => "granted",
+      subscribe: vi.fn(async () => {
+        throw new Error("Registration failed - push service error");
+      }),
+    });
+    const client = new BrowserNotificationClient({
+      getToken: () => "auth-token",
+      fetch: vi.fn(async () => Response.json({ publicKey: "AQID" })),
+      runtime: browser,
+      storage: localStorage,
+    });
+
+    await expect(client.enable()).rejects.toBeInstanceOf(BrowserPushSetupError);
+    await expect(client.enable()).rejects.toThrow("浏览器未能创建推送订阅");
   });
 
   it("reports denied permission without contacting the server", async () => {

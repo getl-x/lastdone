@@ -15,6 +15,7 @@ export type {
   CreateItemInput,
   DefaultCategoryKey,
   IdGenerator,
+  RegisterDeviceInput,
   Repositories,
   RepositoryOptions,
   UpdateItemInput,

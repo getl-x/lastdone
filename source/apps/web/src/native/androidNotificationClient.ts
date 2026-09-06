@@ -21,7 +21,7 @@ import {
 } from "./androidNotificationStore";
 import { ensureAndroidNotificationChannel } from "./androidNotificationScheduler";
 
-async function deviceName(): Promise<string> {
+export async function getAndroidDeviceName(): Promise<string> {
   try {
     const info = await App.getInfo();
     return `Android · ${info.name}`;
@@ -98,7 +98,7 @@ export class AndroidNotificationClient implements NotificationClient {
     const values = preferences ?? (await getAndroidNotificationPreferences());
     return {
       deviceId: await getAndroidNotificationDeviceId(),
-      deviceName: await deviceName(),
+      deviceName: await getAndroidDeviceName(),
       platform: "android",
       enabled,
       status: enabled ? "enabled" : "disabled",
