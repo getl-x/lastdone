@@ -10,6 +10,24 @@
 Mail service is not required. LastDone does not expose public registration and
 does not use email-based password reset in its normal single-user workflow.
 
+## Publish the Docker image
+
+Create a Docker Hub repository named `lastdone` under the intended namespace.
+For a VPS that should pull the image without Docker Hub credentials, make the
+repository public.
+
+Create a Docker Hub personal access token with Read & Write permission. Do not
+use or store the account password in GitHub. In the GitHub repository, open
+Settings, then Secrets and variables, then Actions, and add:
+
+- Repository variable `DOCKERHUB_USERNAME`: the Docker Hub namespace, for
+  example `getl-x`.
+- Repository secret `DOCKERHUB_TOKEN`: the Docker Hub personal access token.
+
+Run the `Publish Docker image` workflow with the tag `latest`. The workflow
+builds and health-checks an amd64 image before publishing the amd64/arm64 image
+to Docker Hub.
+
 ## 1. Create the Compose application
 
 Copy `compose.yml` and `deploy/lastdone.env.example` to a new directory on the

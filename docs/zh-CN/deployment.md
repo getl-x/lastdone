@@ -9,6 +9,21 @@
 
 不需要邮件服务。LastDone 不开放注册，单用户模式下也不依赖邮件找回密码。
 
+## 发布 Docker 镜像
+
+先在目标 Docker Hub 命名空间下创建名为 `lastdone` 的仓库。如果希望 VPS 无需配置
+Docker Hub 登录信息就能直接拉取镜像，应把仓库设为 Public。
+
+在 Docker Hub 创建具有 Read & Write 权限的个人访问令牌。不要把 Docker Hub 账号
+密码保存到 GitHub。进入 GitHub 仓库的 Settings，依次打开 Secrets and variables、
+Actions，然后添加：
+
+- Repository variable `DOCKERHUB_USERNAME`：Docker Hub 命名空间，例如 `getl-x`。
+- Repository secret `DOCKERHUB_TOKEN`：刚创建的 Docker Hub 个人访问令牌。
+
+手动运行 `Publish Docker image` 工作流并把 tag 填为 `latest`。工作流会先构建并健康
+检查 amd64 镜像，通过后再把 amd64/arm64 多架构镜像发布到 Docker Hub。
+
 ## 1. 创建 Compose 应用
 
 把 `compose.yml` 和 `deploy/lastdone.env.example` 复制到 VPS 的独立目录，将示例环境
