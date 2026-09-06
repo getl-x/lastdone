@@ -80,8 +80,16 @@ Never place a keystore or its passwords in the repository.
 
 ## GitHub release workflow
 
-`.github/workflows/android-release.yml` builds and uploads an APK plus its
-SHA-256 file when a `v*` tag is pushed or the workflow is started manually.
+`.github/workflows/android-release.yml` builds and uploads these signed files
+when a `v*` tag is pushed or the workflow is started manually:
+
+- `lastdone-<version>-android-universal.apk`: directly installable on Android
+  devices supported by the app, including ARMv7, ARM64, x86, and x86_64. The
+  application currently contains no ABI-specific native libraries, so separate
+  CPU-specific APKs would not reduce the package meaningfully.
+- `lastdone-<version>-android.aab`: Android App Bundle for publishing through
+  Google Play or another compatible store; it is not directly installable.
+- A SHA-256 file for each package.
 
 Configure these repository secrets:
 

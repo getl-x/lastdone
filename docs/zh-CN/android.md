@@ -71,8 +71,14 @@ LASTDONE_VERSION_CODE
 
 ## GitHub Release 工作流
 
-推送 `v*` 标签或手动运行时，`.github/workflows/android-release.yml` 会构建 APK，
-并把 APK 和 SHA-256 文件上传到 GitHub Release。
+推送 `v*` 标签或手动运行时，`.github/workflows/android-release.yml` 会构建并上传：
+
+- `lastdone-<版本>-android-universal.apk`：可以直接安装，覆盖应用支持的 ARMv7、
+  ARM64、x86 和 x86_64 设备。当前应用不包含按 ABI 区分的原生库，因此再生成多份
+  CPU 专用 APK 并不能明显缩小体积。
+- `lastdone-<版本>-android.aab`：用于 Google Play 或其他兼容商店发布，不能直接
+  安装。
+- 每个安装包对应的 SHA-256 校验文件。
 
 需要配置以下仓库 Secrets：
 

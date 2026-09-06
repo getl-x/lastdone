@@ -87,20 +87,23 @@ jobs:
         working-directory: source
         run: npm run android:sync --workspace @lastdone/web
 
-      - name: Assemble signed release APK
+      - name: Assemble signed universal APK and app bundle
         working-directory: source/apps/web/android
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon assembleRelease
+          ./gradlew --no-daemon assembleRelease bundleRelease
 
       - name: Prepare release files
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release
-          apk="release/lastdone-${LASTDONE_VERSION_NAME}-android.apk"
+          apk="release/lastdone-${LASTDONE_VERSION_NAME}-android-universal.apk"
+          aab="release/lastdone-${LASTDONE_VERSION_NAME}-android.aab"
           cp source/apps/web/android/app/build/outputs/apk/release/app-release.apk "$apk"
+          cp source/apps/web/android/app/build/outputs/bundle/release/app-release.aab "$aab"
           sha256sum "$apk" > "${apk}.sha256"
+          sha256sum "$aab" > "${aab}.sha256"
 
       - name: Create or update GitHub release
         env:
