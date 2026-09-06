@@ -1,4 +1,5 @@
 name: Publish Android APK
+run-name: LastDone ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }} · Android APK + AAB
 
 on:
   push:
