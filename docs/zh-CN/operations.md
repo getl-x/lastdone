@@ -43,7 +43,7 @@ JSON 备份。这个文件适合在更换浏览器、清理本地数据或迁移
 ## 升级
 
 1. 确认 VPS 外部已有一份近期备份。
-2. 把 `LASTDONE_IMAGE` 改成不可变版本标签，例如 `getl-x/lastdone:0.2.0`。
+2. 把 `LASTDONE_IMAGE` 改成不可变版本标签，例如 `getl/lastdone:0.2.0`。
 3. 拉取镜像并重新创建服务。
 4. 检查容器健康状态和 `https://你的域名/api/lastdone/health`。
 5. 打开 Web 应用确认同步正常，再决定是否清理旧的外部备份。

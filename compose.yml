@@ -2,7 +2,7 @@ name: lastdone
 
 services:
   lastdone:
-    image: ${LASTDONE_IMAGE:-getl-x/lastdone:latest}
+    image: ${LASTDONE_IMAGE:-getl/lastdone:latest}
     restart: unless-stopped
     environment:
       GOMEMLIMIT: ${GOMEMLIMIT:-384MiB}

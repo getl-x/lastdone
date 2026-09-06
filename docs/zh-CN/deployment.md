@@ -18,7 +18,7 @@ Docker Hub 登录信息就能直接拉取镜像，应把仓库设为 Public。
 密码保存到 GitHub。进入 GitHub 仓库的 Settings，依次打开 Secrets and variables、
 Actions，然后添加：
 
-- Repository variable `DOCKERHUB_USERNAME`：Docker Hub 命名空间，例如 `getl-x`。
+- Repository variable `DOCKERHUB_USERNAME`：Docker Hub 命名空间，例如 `getl`。
 - Repository secret `DOCKERHUB_TOKEN`：刚创建的 Docker Hub 个人访问令牌。
 
 手动运行 `Publish Docker image` 工作流并把 tag 填为 `latest`。工作流会先构建并健康
@@ -30,7 +30,7 @@ Actions，然后添加：
 文件改名为 `.env`，至少修改：
 
 ```dotenv
-LASTDONE_IMAGE=getl-x/lastdone:latest
+LASTDONE_IMAGE=getl/lastdone:latest
 LASTDONE_VAPID_SUBJECT=https://lastdone.example.com
 TZ=Asia/Shanghai
 ```

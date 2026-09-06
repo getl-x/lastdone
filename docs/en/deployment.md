@@ -21,7 +21,7 @@ use or store the account password in GitHub. In the GitHub repository, open
 Settings, then Secrets and variables, then Actions, and add:
 
 - Repository variable `DOCKERHUB_USERNAME`: the Docker Hub namespace, for
-  example `getl-x`.
+  example `getl`.
 - Repository secret `DOCKERHUB_TOKEN`: the Docker Hub personal access token.
 
 Run the `Publish Docker image` workflow with the tag `latest`. The workflow
@@ -34,7 +34,7 @@ Copy `compose.yml` and `deploy/lastdone.env.example` to a new directory on the
 VPS. Rename the example file to `.env` and change at least:
 
 ```dotenv
-LASTDONE_IMAGE=getl-x/lastdone:latest
+LASTDONE_IMAGE=getl/lastdone:latest
 LASTDONE_VAPID_SUBJECT=https://lastdone.example.com
 TZ=Asia/Shanghai
 ```

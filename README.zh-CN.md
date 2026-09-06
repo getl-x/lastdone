@@ -39,7 +39,7 @@ Google Play 服务。
 复制 [compose.yml](compose.yml)，并在同一目录创建 `.env`：
 
 ```dotenv
-LASTDONE_IMAGE=getl-x/lastdone:latest
+LASTDONE_IMAGE=getl/lastdone:latest
 LASTDONE_PORT=8090
 TZ=Asia/Shanghai
 LASTDONE_VAPID_SUBJECT=https://lastdone.example.com

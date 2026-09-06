@@ -53,7 +53,7 @@ PocketBase backup.
 
 1. Confirm that an external copy of a recent backup exists.
 2. Change `LASTDONE_IMAGE` to an immutable version tag such as
-   `getl-x/lastdone:0.2.0`.
+   `getl/lastdone:0.2.0`.
 3. Pull the image and recreate the service.
 4. Check container health and `https://your-domain/api/lastdone/health`.
 5. Open the web application and verify synchronization before removing old
