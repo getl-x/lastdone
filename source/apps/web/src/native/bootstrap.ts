@@ -11,6 +11,7 @@ let started = false;
 export async function bootstrapNativeRuntime(): Promise<void> {
   if (started || !isAndroidNative()) return;
   started = true;
+  document.documentElement.classList.add("native-android");
 
   await Promise.all([
     LocalNotifications.addListener("localNotificationActionPerformed", (event) =>

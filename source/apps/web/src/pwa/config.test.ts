@@ -9,8 +9,8 @@ describe("PWA configuration", () => {
       short_name: "LastDone",
       display: "standalone",
       start_url: "/",
-      theme_color: "#f4efe6",
-      background_color: "#f4efe6",
+      theme_color: "#28745e",
+      background_color: "#f3f7f5",
     });
     expect(manifest.icons).toEqual(
       expect.arrayContaining([

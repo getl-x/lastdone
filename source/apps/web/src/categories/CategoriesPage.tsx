@@ -60,7 +60,7 @@ export function CategoriesPage() {
         </div>
       </header>
 
-      <section className="surface-card">
+      <section className="surface-card category-create-card">
         <h2>添加分类</h2>
         <form className="inline-form" onSubmit={add}>
           <label className="field grow-field">
@@ -86,7 +86,7 @@ export function CategoriesPage() {
         </form>
       </section>
 
-      <section className="surface-card">
+      <section className="surface-card category-list-card">
         <h2>全部分类</h2>
         <ul className="category-list">
           {categories?.map((category, index) => (
@@ -131,7 +131,7 @@ export function CategoriesPage() {
                   </label>
                 </div>
               ) : (
-                <div>
+                <div className="category-copy">
                   <strong>{category.name}</strong>
                   <small>
                     {category.lifecycle === "archived" ? "已归档" : `排序 ${index + 1}`}

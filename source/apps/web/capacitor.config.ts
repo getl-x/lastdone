@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   appId: "com.getlx.lastdone",
   appName: "LastDone",
   webDir: "dist",
-  backgroundColor: "#F5F2EA",
+  backgroundColor: "#F3F7F5",
   loggingBehavior: "debug",
   server: {
     hostname: "localhost",
@@ -27,7 +27,7 @@ const config: CapacitorConfig = {
   plugins: {
     LocalNotifications: {
       smallIcon: "ic_stat_lastdone",
-      iconColor: "#3F6B5B",
+      iconColor: "#28745E",
     },
   },
 };

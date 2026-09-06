@@ -5,10 +5,39 @@ import { ConnectivityBanner } from "../pwa/ConnectivityBanner";
 import { UpdatePrompt } from "../pwa/UpdatePrompt";
 
 const NAVIGATION = [
-  { to: "/", label: "首页", icon: "⌂", end: true },
-  { to: "/categories", label: "分类", icon: "◫", end: false },
-  { to: "/settings", label: "设置", icon: "⚙", end: false },
+  { to: "/", label: "首页", icon: "home", end: true },
+  { to: "/categories", label: "分类", icon: "categories", end: false },
+  { to: "/settings", label: "设置", icon: "settings", end: false },
 ] as const;
+
+function NavigationIcon({ icon }: { icon: (typeof NAVIGATION)[number]["icon"] }) {
+  if (icon === "home") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m3.5 10.5 8.5-7 8.5 7" />
+        <path d="M5.5 9v11h13V9M9 20v-6h6v6" />
+      </svg>
+    );
+  }
+  if (icon === "categories") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3.5" y="3.5" width="7" height="7" rx="2" />
+        <rect x="13.5" y="3.5" width="7" height="7" rx="2" />
+        <rect x="3.5" y="13.5" width="7" height="7" rx="2" />
+        <rect x="13.5" y="13.5" width="7" height="7" rx="2" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 6h10M18 6h2M4 12h3M11 12h9M4 18h8M16 18h4" />
+      <circle cx="16" cy="6" r="2" />
+      <circle cx="9" cy="12" r="2" />
+      <circle cx="14" cy="18" r="2" />
+    </svg>
+  );
+}
 
 function NavigationLinks() {
   return (
@@ -21,7 +50,7 @@ function NavigationLinks() {
           className={({ isActive }) => `navigation-link${isActive ? " is-active" : ""}`}
         >
           <span className="navigation-icon" aria-hidden="true">
-            {item.icon}
+            <NavigationIcon icon={item.icon} />
           </span>
           <span>{item.label}</span>
         </NavLink>
