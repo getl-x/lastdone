@@ -1,5 +1,5 @@
 import type { PullResponse, PushResponse, SyncTransport } from "./types";
-import type { SyncOperation } from "@lastdone/storage";
+import type { ConflictRecord, SyncOperation } from "@lastdone/storage";
 
 export interface HttpSyncTransportOptions {
   baseUrl?: string;
@@ -34,6 +34,19 @@ export class HttpSyncTransport implements SyncTransport {
     return this.#request<PullResponse>(`/api/lastdone/sync/pull?${search.toString()}`, {
       method: "GET",
     });
+  }
+
+  async resolveConflict(
+    conflictId: string,
+    choice: "local" | "server",
+  ): Promise<ConflictRecord> {
+    return this.#request<ConflictRecord>(
+      `/api/lastdone/sync/conflicts/${encodeURIComponent(conflictId)}/resolve`,
+      {
+        method: "POST",
+        body: JSON.stringify({ choice }),
+      },
+    );
   }
 
   async #request<T>(path: string, init: RequestInit): Promise<T> {

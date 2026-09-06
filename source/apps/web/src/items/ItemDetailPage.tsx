@@ -49,7 +49,7 @@ export function ItemDetailPage({ today = currentLocalDate() }: { today?: string 
     ]);
     return {
       item,
-      category,
+      category: category?.deletedAt ? undefined : category,
       completions,
       skips,
       dueSoonDays: settings?.dueSoonDays ?? 7,

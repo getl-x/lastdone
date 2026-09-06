@@ -7,15 +7,7 @@ import {
   type FormEvent,
 } from "react";
 
-import type {
-  CategoryRecord,
-  CompletionRecord,
-  DeviceRecord,
-  ItemRecord,
-  LastDoneDatabase,
-  SkipRecord,
-  UserSettingsRecord,
-} from "@lastdone/storage";
+import type { ConflictRecord } from "@lastdone/storage";
 
 import { useAuth } from "../auth/AuthProvider";
 import { useData } from "../data/DataProvider";
@@ -26,44 +18,16 @@ import type {
   NotificationPreferences,
 } from "../notifications/client";
 import { useNotifications } from "../notifications/NotificationProvider";
+import {
+  buildImportPlan,
+  buildJsonExport,
+  restoreJsonExport,
+  type LastDoneImportPlan,
+} from "./archive";
 import { VersionInfo } from "./VersionInfo";
 
-export interface LastDoneExport {
-  format: "lastdone-export";
-  version: 1;
-  exportedAt: string;
-  categories: CategoryRecord[];
-  items: ItemRecord[];
-  completions: CompletionRecord[];
-  skips: SkipRecord[];
-  settings: UserSettingsRecord[];
-  devices: DeviceRecord[];
-}
-
-export async function buildJsonExport(
-  db: LastDoneDatabase,
-  exportedAt = new Date().toISOString(),
-): Promise<LastDoneExport> {
-  const [categories, items, completions, skips, settings, devices] = await Promise.all([
-    db.categories.toArray(),
-    db.items.toArray(),
-    db.completions.toArray(),
-    db.skips.toArray(),
-    db.settings.toArray(),
-    db.devices.toArray(),
-  ]);
-  return {
-    format: "lastdone-export",
-    version: 1,
-    exportedAt,
-    categories,
-    items,
-    completions,
-    skips,
-    settings,
-    devices,
-  };
-}
+export { buildJsonExport };
+export type { LastDoneExport } from "./archive";
 
 function download(name: string, content: string, type: string): void {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -79,22 +43,60 @@ function csvCell(value: unknown): string {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
+function conflictValue(value: unknown): string {
+  if (value === null) return "空";
+  if (typeof value === "string") return value || "空字符串";
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+const CONFLICT_ENTITY_LABELS: Record<ConflictRecord["entity"], string> = {
+  categories: "分类",
+  items: "事项",
+  completions: "完成记录",
+  skips: "跳过记录",
+  settings: "设置",
+  devices: "设备",
+};
+
 export function SettingsPage() {
-  const { db, repositories, userId } = useData();
-  const { changePassword } = useAuth();
+  const { db, repositories, resolveConflict, userId } = useData();
+  const { changePassword, logout } = useAuth();
   const notifications = useNotifications();
   const runtimeConfig = useRuntimeConfig();
   const settings = useLiveQuery(() => db.settings.get(userId), [db, userId]);
   const devices = useLiveQuery(
-    () => db.devices.where("userId").equals(userId).toArray(),
+    async () =>
+      (await db.devices.where("userId").equals(userId).toArray()).filter(
+        (device) => !device.deletedAt,
+      ),
     [db, userId],
   );
   const pendingCount = useLiveQuery(
-    () => db.outbox.where("status").equals("pending").count(),
-    [db],
+    () =>
+      db.outbox
+        .where("userId")
+        .equals(userId)
+        .filter((operation) => operation.status === "pending")
+        .count(),
+    [db, userId],
+  );
+  const conflicts = useLiveQuery(
+    () =>
+      db.conflicts
+        .where("userId")
+        .equals(userId)
+        .filter((conflict) => conflict.status === "unresolved")
+        .sortBy("createdAt"),
+    [db, userId],
   );
   const [saved, setSaved] = useState(false);
   const [importPreview, setImportPreview] = useState<string | null>(null);
+  const [importPlan, setImportPlan] = useState<LastDoneImportPlan | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
@@ -112,6 +114,8 @@ export function SettingsPage() {
   >([]);
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationError, setNotificationError] = useState<string | null>(null);
+  const [resolvingConflictId, setResolvingConflictId] = useState<string | null>(null);
+  const [conflictError, setConflictError] = useState<string | null>(null);
 
   const refreshNotificationDevices = useCallback(async () => {
     try {
@@ -190,7 +194,7 @@ export function SettingsPage() {
   }
 
   async function exportJson() {
-    const archive = await buildJsonExport(db);
+    const archive = await buildJsonExport(db, userId);
     download(
       `lastdone-${archive.exportedAt.slice(0, 10)}.json`,
       JSON.stringify(archive, null, 2),
@@ -199,9 +203,10 @@ export function SettingsPage() {
   }
 
   async function exportCsv() {
-    const [items, completions] = await Promise.all([
-      db.items.toArray(),
-      db.completions.toArray(),
+    const [items, completions, skips] = await Promise.all([
+      db.items.where("userId").equals(userId).toArray(),
+      db.completions.where("userId").equals(userId).toArray(),
+      db.skips.where("userId").equals(userId).toArray(),
     ]);
     const rows = [
       ["type", "id", "itemId", "name", "date", "note"],
@@ -212,6 +217,14 @@ export function SettingsPage() {
         entry.itemId,
         "",
         entry.localDate,
+        entry.note,
+      ]),
+      ...skips.map((entry) => [
+        "skip",
+        entry.id,
+        entry.itemId,
+        "",
+        entry.occurrenceDate,
         entry.note,
       ]),
     ];
@@ -225,16 +238,41 @@ export function SettingsPage() {
   async function previewImport(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
+    setImportPlan(null);
     try {
-      const value = JSON.parse(await file.text()) as Partial<LastDoneExport>;
-      if (value.format !== "lastdone-export" || value.version !== 1) {
-        throw new Error("unsupported export format");
-      }
+      const value: unknown = JSON.parse(await file.text());
+      const plan = await buildImportPlan(db, userId, value);
+      setImportPlan(plan);
       setImportPreview(
-        `可导入 ${value.categories?.length ?? 0} 个分类、${value.items?.length ?? 0} 个事项和 ${value.completions?.length ?? 0} 条完成记录。`,
+        `校验通过：将新增 ${plan.summary.add} 条、更新 ${plan.summary.update} 条、移除 ${plan.summary.remove} 条记录。`,
       );
-    } catch {
-      setImportPreview("文件无法识别，当前数据没有改变。");
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "未知格式错误";
+      setImportPreview(`文件无法导入：${detail}。当前数据没有改变。`);
+    }
+  }
+
+  async function applyImport() {
+    if (!importPlan) return;
+    if (
+      !window.confirm(
+        `将按照备份恢复数据：新增 ${importPlan.summary.add} 条、更新 ${importPlan.summary.update} 条、移除 ${importPlan.summary.remove} 条。确定继续吗？`,
+      )
+    ) {
+      return;
+    }
+    setImportBusy(true);
+    try {
+      const result = await restoreJsonExport(db, userId, importPlan);
+      setImportPlan(null);
+      setImportPreview(
+        `恢复已写入本机：新增 ${result.add} 条、更新 ${result.update} 条、移除 ${result.remove} 条，正在等待同步。`,
+      );
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "未知错误";
+      setImportPreview(`恢复失败：${detail}。事务已回滚。`);
+    } finally {
+      setImportBusy(false);
     }
   }
 
@@ -325,6 +363,18 @@ export function SettingsPage() {
     }
     await resetAndroidServerOrigin();
     window.location.reload();
+  }
+
+  async function chooseConflict(conflictId: string, choice: "local" | "server") {
+    setResolvingConflictId(conflictId);
+    setConflictError(null);
+    try {
+      await resolveConflict(conflictId, choice);
+    } catch {
+      setConflictError("冲突处理失败，请确认网络连接后重试。");
+    } finally {
+      setResolvingConflictId(null);
+    }
   }
 
   if (settings === undefined) {
@@ -432,7 +482,7 @@ export function SettingsPage() {
             <>
               <p className="sync-status">
                 <span className="status-dot" />
-                这台设备已启用
+                这台设备已启用{" "}
                 {notificationState.platform === "android" ? "本地通知" : "Web Push"}
               </p>
               <div className="notification-preferences">
@@ -520,6 +570,60 @@ export function SettingsPage() {
           <p className="muted">离线时可以继续使用，恢复网络后会自动重试。</p>
         </section>
 
+        {conflicts?.length ? (
+          <section className="surface-card conflict-settings">
+            <h2>需要确认的同步冲突</h2>
+            <p className="muted">
+              两台设备同时修改了同一字段。请选择保留本机修改，或保留服务器当前值。
+            </p>
+            <ul className="conflict-list">
+              {conflicts.map((conflict) => (
+                <li key={conflict.id}>
+                  <div className="conflict-heading">
+                    <strong>
+                      {CONFLICT_ENTITY_LABELS[conflict.entity]} · {conflict.field}
+                    </strong>
+                    <span>{conflict.entityId}</span>
+                  </div>
+                  <div className="conflict-values">
+                    <div>
+                      <small>本机修改</small>
+                      <pre>{conflictValue(conflict.localValue)}</pre>
+                    </div>
+                    <div>
+                      <small>服务器当前值</small>
+                      <pre>{conflictValue(conflict.serverValue)}</pre>
+                    </div>
+                  </div>
+                  <div className="action-row">
+                    <button
+                      className="button button-secondary"
+                      type="button"
+                      disabled={resolvingConflictId === conflict.id}
+                      onClick={() => void chooseConflict(conflict.id, "local")}
+                    >
+                      保留本机修改
+                    </button>
+                    <button
+                      className="button button-secondary"
+                      type="button"
+                      disabled={resolvingConflictId === conflict.id}
+                      onClick={() => void chooseConflict(conflict.id, "server")}
+                    >
+                      保留服务器值
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {conflictError ? (
+              <p className="field-error" role="alert">
+                {conflictError}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+
         {runtimeConfig.isAndroid ? (
           <section className="surface-card">
             <h2>服务器</h2>
@@ -574,6 +678,16 @@ export function SettingsPage() {
           </label>
           {importPreview ? (
             <div className="notice notice-info">{importPreview}</div>
+          ) : null}
+          {importPlan ? (
+            <button
+              className="button button-primary"
+              type="button"
+              disabled={importBusy}
+              onClick={() => void applyImport()}
+            >
+              {importBusy ? "正在恢复…" : "确认恢复这份备份"}
+            </button>
           ) : null}
         </section>
 
@@ -633,6 +747,24 @@ export function SettingsPage() {
               </p>
             ) : null}
           </form>
+        </section>
+
+        <section className="surface-card">
+          <h2>账号</h2>
+          <p className="muted">
+            退出后，本机离线数据库仍会保留；再次登录同一账号后可以继续使用。
+          </p>
+          <button
+            className="button button-secondary"
+            type="button"
+            onClick={() => {
+              if (window.confirm("确定退出 LastDone 吗？")) {
+                void logout();
+              }
+            }}
+          >
+            退出登录
+          </button>
         </section>
       </div>
 

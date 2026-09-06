@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuthProvider, type AuthClient } from "./AuthProvider";
@@ -8,9 +8,12 @@ import { LoginPage } from "./LoginPage";
 
 function renderLogin(client: AuthClient) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={["/login"]}>
       <AuthProvider client={client}>
-        <LoginPage />
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<p>应用首页</p>} />
+        </Routes>
       </AuthProvider>
     </MemoryRouter>,
   );
@@ -51,7 +54,7 @@ describe("LoginPage", () => {
     );
   });
 
-  it("reports an offline cached session as usable", () => {
+  it("opens the application with an offline cached session", () => {
     renderLogin({
       currentUser: () => ({ id: "user-1", username: "getl" }),
       login: vi.fn(),
@@ -59,6 +62,6 @@ describe("LoginPage", () => {
       isOffline: () => true,
     });
 
-    expect(screen.getByText("当前离线，已缓存的数据仍可使用。")).toBeInTheDocument();
+    expect(screen.getByText("应用首页")).toBeInTheDocument();
   });
 });

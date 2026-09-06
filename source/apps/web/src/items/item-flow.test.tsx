@@ -1,8 +1,8 @@
 import "fake-indexeddb/auto";
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { LastDoneDatabase } from "@lastdone/storage";
@@ -55,5 +55,56 @@ describe("item flow", () => {
       name: "更换滤芯",
       dueDate: "2026-10-30",
     });
+  });
+
+  it("keeps the current archived category visible while editing", async () => {
+    const db = new LastDoneDatabase(`item-archived-category-${crypto.randomUUID()}`);
+    databases.push(db);
+    const timestamp = "2026-09-01T00:00:00.000Z";
+    await db.categories.add({
+      id: "category0000001",
+      userId: "user-1",
+      revision: 2,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      deletedAt: null,
+      name: "旧分类",
+      icon: "shapes",
+      color: "#77736D",
+      displayOrder: 0,
+      lifecycle: "archived",
+    });
+    await db.items.add({
+      id: "item00000000001",
+      userId: "user-1",
+      revision: 1,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      deletedAt: null,
+      name: "旧事项",
+      categoryId: "category0000001",
+      schedule: { type: "relative", every: 30, unit: "days" },
+      initialDueDate: "2026-09-30",
+      dueDate: "2026-09-30",
+      lastCompletedDate: null,
+      lastCompletionId: null,
+      important: false,
+      reminderOffsets: [],
+      lifecycle: "active",
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/items/item00000000001/edit"]}>
+        <DataProvider db={db} userId="user-1">
+          <Routes>
+            <Route path="/items/:id/edit" element={<ItemFormPage />} />
+          </Routes>
+        </DataProvider>
+      </MemoryRouter>,
+    );
+
+    const category = await screen.findByLabelText("分类");
+    await waitFor(() => expect(category).toHaveValue("category0000001"));
+    expect(screen.getByRole("option", { name: "旧分类（已归档）" })).toBeDisabled();
   });
 });

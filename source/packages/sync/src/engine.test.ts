@@ -91,7 +91,7 @@ describe("sync engine", () => {
 
     expect(calls).toEqual(["push:1", "pull:0"]);
     expect(result).toEqual({ pushed: 1, pulled: 1, conflicts: 0 });
-    expect(await listPendingOperations(db, 10)).toEqual([]);
+    expect(await listPendingOperations(db, USER_ID, 10)).toEqual([]);
     expect((await db.categories.get("category-1"))?.name).toBe("家庭");
     expect(await db.syncMeta.get(USER_ID)).toMatchObject({
       lastSequence: 7,
@@ -130,7 +130,7 @@ describe("sync engine", () => {
     await expect(engine.run()).rejects.toThrow("server unavailable");
 
     expect(pull).not.toHaveBeenCalled();
-    expect((await listPendingOperations(db, 10))[0]).toMatchObject({
+    expect((await listPendingOperations(db, USER_ID, 10))[0]).toMatchObject({
       id: "operation-1",
       attempts: 1,
       lastError: "server unavailable",
@@ -139,6 +139,39 @@ describe("sync engine", () => {
       lastSequence: 0,
       lastError: "server unavailable",
     });
+  });
+
+  it("rejects a push response that acknowledges an unknown operation", async () => {
+    await enqueueOperation(db, {
+      id: "operation-1",
+      userId: USER_ID,
+      entity: "items",
+      entityId: "item-1",
+      action: "create",
+      baseRevision: 0,
+      fields: { name: "备份电脑" },
+      createdAt: "2026-09-06T01:00:00.000Z",
+      status: "pending",
+      attempts: 0,
+      lastError: null,
+    });
+    const engine = createSyncEngine({
+      db,
+      userId: USER_ID,
+      transport: {
+        async push() {
+          return { appliedOperationIds: ["other-operation"], conflicts: [] };
+        },
+        async pull() {
+          throw new Error("pull should not run");
+        },
+      },
+    });
+
+    await expect(engine.run()).rejects.toThrow("unknown operation");
+
+    expect((await db.outbox.get("operation-1"))?.status).toBe("pending");
+    expect((await db.outbox.get("operation-1"))?.attempts).toBe(1);
   });
 
   it("pulls all pages and stores unresolved conflicts", async () => {
@@ -249,6 +282,6 @@ describe("sync engine", () => {
     await Promise.all([firstRun, queuedRun]);
 
     expect(pushed).toEqual([["operation-1"], ["operation-2"]]);
-    expect(await listPendingOperations(db, 10)).toEqual([]);
+    expect(await listPendingOperations(db, USER_ID, 10)).toEqual([]);
   });
 });

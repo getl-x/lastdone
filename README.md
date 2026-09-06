@@ -28,8 +28,8 @@ are scheduled locally and do not require Firebase or Google Play services.
 - Fixed monthly and yearly calendar schedules
 - Overdue, today, due-soon, healthy, paused, and archived states
 - One-tap completion, undo, history, past completion, and fixed-date skipping
-- Categories, search, JSON export, and CSV export
-- Offline outbox with automatic synchronization and conflict records
+- Categories, search, validated JSON backup/restore, and CSV export
+- Offline outbox with automatic synchronization and interactive conflict resolution
 - Web Push for iPhone PWA and desktop browsers
 - Local notifications for Android, including quiet hours and a catch-up window
 - Embedded PocketBase server with automatic migrations and backups

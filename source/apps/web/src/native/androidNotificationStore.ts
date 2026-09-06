@@ -6,6 +6,7 @@ const DEVICE_ID_KEY = "lastdone_android_notification_device_id";
 const ENABLED_KEY = "lastdone_android_notification_enabled";
 const PREFERENCES_KEY = "lastdone_android_notification_preferences";
 const SCHEDULE_LEDGER_KEY = "lastdone_android_notification_schedule_ledger";
+const POCKETBASE_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
 export const ANDROID_NOTIFICATION_DEFAULTS: NotificationPreferences = {
   digestEnabled: false,
@@ -13,7 +14,10 @@ export const ANDROID_NOTIFICATION_DEFAULTS: NotificationPreferences = {
 };
 
 function makeDeviceId(): string {
-  return `android-${crypto.randomUUID()}`;
+  return Array.from(
+    crypto.getRandomValues(new Uint8Array(15)),
+    (value) => POCKETBASE_ID_ALPHABET[value % POCKETBASE_ID_ALPHABET.length],
+  ).join("");
 }
 
 export async function getAndroidNotificationDeviceId(): Promise<string> {

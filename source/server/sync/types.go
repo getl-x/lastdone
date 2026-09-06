@@ -12,17 +12,17 @@ type Operation struct {
 }
 
 type Conflict struct {
-	ID             string `json:"id"`
-	UserID         string `json:"userId"`
-	Entity         string `json:"entity"`
-	EntityID       string `json:"entityId"`
-	Field          string `json:"field"`
-	LocalValue     any    `json:"localValue"`
-	ServerValue    any    `json:"serverValue"`
-	ServerRevision int    `json:"serverRevision"`
-	Status         string `json:"status"`
-	CreatedAt      string `json:"createdAt"`
-	ResolvedAt     string `json:"resolvedAt,omitempty"`
+	ID             string  `json:"id"`
+	UserID         string  `json:"userId"`
+	Entity         string  `json:"entity"`
+	EntityID       string  `json:"entityId"`
+	Field          string  `json:"field"`
+	LocalValue     any     `json:"localValue"`
+	ServerValue    any     `json:"serverValue"`
+	ServerRevision int     `json:"serverRevision"`
+	Status         string  `json:"status"`
+	CreatedAt      string  `json:"createdAt"`
+	ResolvedAt     *string `json:"resolvedAt"`
 }
 
 type Change struct {

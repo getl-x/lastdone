@@ -75,8 +75,26 @@ describe("SettingsPage", () => {
       reminderOffsets: [],
       lifecycle: "active",
     });
+    await db.items.add({
+      id: "item0000000002",
+      userId: "user-2",
+      revision: 1,
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+      deletedAt: null,
+      name: "其他账号的事项",
+      categoryId: "category0000002",
+      schedule: { type: "relative", every: 30, unit: "days" },
+      initialDueDate: "2026-09-05",
+      dueDate: "2026-09-05",
+      lastCompletedDate: null,
+      lastCompletionId: null,
+      important: false,
+      reminderOffsets: [],
+      lifecycle: "active",
+    });
 
-    const archive = await buildJsonExport(db, "2026-09-05T08:00:00.000Z");
+    const archive = await buildJsonExport(db, "user-1", "2026-09-05T08:00:00.000Z");
 
     expect(archive).toMatchObject({
       format: "lastdone-export",
@@ -84,6 +102,7 @@ describe("SettingsPage", () => {
       exportedAt: "2026-09-05T08:00:00.000Z",
     });
     expect(archive.items).toHaveLength(1);
+    expect(archive.items[0]?.userId).toBe("user-1");
   });
 
   it("changes the account password through the authenticated client", async () => {

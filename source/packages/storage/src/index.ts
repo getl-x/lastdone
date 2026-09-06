@@ -4,11 +4,16 @@ export {
   listPendingOperations,
   markOperationApplied,
 } from "./outbox";
-export { createRepositories } from "./repositories";
+export {
+  DEFAULT_CATEGORY_KEYS,
+  createRepositories,
+  defaultCategoryId,
+} from "./repositories";
 export type {
   CompleteItemInput,
   CreateCategoryInput,
   CreateItemInput,
+  DefaultCategoryKey,
   IdGenerator,
   Repositories,
   RepositoryOptions,
@@ -24,5 +29,6 @@ export type {
   SyncMetaRecord,
   SyncOperation,
   SyncEntity,
+  SyncRecord,
   UserSettingsRecord,
 } from "./schema";

@@ -5,7 +5,16 @@ export async function enqueueOperation(
   db: LastDoneDatabase,
   operation: SyncOperation,
 ): Promise<void> {
-  await db.outbox.add(operation);
+  const requestedTime = new Date(operation.createdAt).getTime();
+  if (!Number.isFinite(requestedTime)) {
+    throw new Error(`invalid operation timestamp: ${operation.createdAt}`);
+  }
+  const latest = await db.outbox.orderBy("createdAt").last();
+  const latestTime = latest
+    ? new Date(latest.createdAt).getTime()
+    : Number.NEGATIVE_INFINITY;
+  const createdAt = new Date(Math.max(requestedTime, latestTime + 1)).toISOString();
+  await db.outbox.add({ ...operation, createdAt });
 }
 
 export async function markOperationApplied(
@@ -25,6 +34,7 @@ export async function markOperationApplied(
 
 export async function listPendingOperations(
   db: LastDoneDatabase,
+  userId: string,
   limit: number,
 ): Promise<SyncOperation[]> {
   if (!Number.isInteger(limit) || limit <= 0) {
@@ -34,6 +44,7 @@ export async function listPendingOperations(
   return db.outbox
     .where("[status+createdAt]")
     .between(["pending", DexieMinKey], ["pending", DexieMaxKey])
+    .filter((operation) => operation.userId === userId)
     .limit(limit)
     .toArray();
 }

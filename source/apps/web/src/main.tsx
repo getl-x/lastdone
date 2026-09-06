@@ -13,10 +13,15 @@ import {
 import "./styles/tokens.css";
 import "./styles/global.css";
 
-const root = document.getElementById("root");
-if (!root) {
-  throw new Error("root element is missing");
+function requiredElement(id: string): HTMLElement {
+  const element = document.getElementById(id);
+  if (!element) {
+    throw new Error(`${id} element is missing`);
+  }
+  return element;
 }
+
+const root = requiredElement("root");
 
 function Root({ initialConfig }: { initialConfig: RuntimeConfig | null }) {
   const [runtimeConfig, setRuntimeConfig] = useState(initialConfig);

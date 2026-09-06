@@ -55,9 +55,6 @@ export function LoginPage() {
         <h1 id="login-title">记住上次，安排下次</h1>
         <p className="login-intro">管理那些不必每天做，却不能忘记的重复事项。</p>
 
-        {status === "offline-authenticated" ? (
-          <div className="notice notice-info">当前离线，已缓存的数据仍可使用。</div>
-        ) : null}
         {errors.form ? (
           <div className="notice notice-error" role="alert">
             {errors.form}

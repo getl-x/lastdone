@@ -2,6 +2,15 @@ import { Link } from "react-router";
 
 import type { CategoryRecord, ItemRecord } from "@lastdone/storage";
 
+const CATEGORY_SYMBOLS: Record<string, string> = {
+  "heart-pulse": "♥",
+  house: "⌂",
+  cloud: "☁",
+  cpu: "▣",
+  car: "◆",
+  shapes: "●",
+};
+
 export function ItemCard({
   item,
   category,
@@ -24,7 +33,7 @@ export function ItemCard({
           style={{ backgroundColor: category?.color ?? "#77736D" }}
           aria-hidden="true"
         >
-          {category?.icon === "house" ? "⌂" : "•"}
+          {CATEGORY_SYMBOLS[category?.icon ?? ""] ?? "●"}
         </span>
         <span className="item-card-copy">
           <span className="item-card-title">

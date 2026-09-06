@@ -11,6 +11,8 @@ type Store interface {
 	NextSequence(ctx context.Context) (int64, error)
 	SaveChange(ctx context.Context, change Change) error
 	SaveConflict(ctx context.Context, conflict Conflict) error
+	FindConflict(ctx context.Context, userID string, conflictID string) (Conflict, bool, error)
+	MarkFieldConflictsResolved(ctx context.Context, userID string, entity string, entityID string, field string, resolvedAt string) error
 	ListChanges(ctx context.Context, userID string, after int64, limit int) ([]Change, bool, error)
-	ListConflicts(ctx context.Context, userID string) ([]Conflict, error)
+	ListConflicts(ctx context.Context, userID string, limit int) ([]Conflict, error)
 }

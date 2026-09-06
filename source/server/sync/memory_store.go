@@ -93,6 +93,30 @@ func (store *MemoryStore) SaveConflict(_ context.Context, conflict Conflict) err
 	return nil
 }
 
+func (store *MemoryStore) FindConflict(_ context.Context, userID string, conflictID string) (Conflict, bool, error) {
+	for _, conflict := range store.conflicts {
+		if conflict.UserID == userID && conflict.ID == conflictID {
+			return conflict, true, nil
+		}
+	}
+	return Conflict{}, false, nil
+}
+
+func (store *MemoryStore) MarkFieldConflictsResolved(_ context.Context, userID string, entity string, entityID string, field string, resolvedAt string) error {
+	for index := range store.conflicts {
+		conflict := &store.conflicts[index]
+		if conflict.UserID == userID &&
+			conflict.Entity == entity &&
+			conflict.EntityID == entityID &&
+			conflict.Field == field &&
+			conflict.Status == "unresolved" {
+			conflict.Status = "resolved"
+			conflict.ResolvedAt = &resolvedAt
+		}
+	}
+	return nil
+}
+
 func (store *MemoryStore) ListChanges(_ context.Context, userID string, after int64, limit int) ([]Change, bool, error) {
 	filtered := make([]Change, 0)
 	for _, change := range store.changes {
@@ -110,12 +134,21 @@ func (store *MemoryStore) ListChanges(_ context.Context, userID string, after in
 	return filtered, hasMore, nil
 }
 
-func (store *MemoryStore) ListConflicts(_ context.Context, userID string) ([]Conflict, error) {
+func (store *MemoryStore) ListConflicts(_ context.Context, userID string, limit int) ([]Conflict, error) {
 	result := make([]Conflict, 0)
 	for _, conflict := range store.conflicts {
-		if conflict.UserID == userID && conflict.Status == "unresolved" {
+		if conflict.UserID == userID {
 			result = append(result, conflict)
 		}
+	}
+	sort.SliceStable(result, func(left int, right int) bool {
+		if result[left].Status != result[right].Status {
+			return result[left].Status == "unresolved"
+		}
+		return result[left].CreatedAt > result[right].CreatedAt
+	})
+	if limit > 0 && len(result) > limit {
+		result = result[:limit]
 	}
 	return result, nil
 }

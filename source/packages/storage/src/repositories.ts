@@ -61,6 +61,7 @@ export interface Repositories {
       categoryId: string,
       patch: Partial<Pick<CategoryRecord, "name" | "icon" | "color" | "displayOrder">>,
     ): Promise<void>;
+    move(categoryId: string, direction: -1 | 1): Promise<void>;
     setArchived(categoryId: string, archived: boolean): Promise<void>;
   };
   items: {
@@ -84,6 +85,38 @@ export interface Repositories {
 
 const POCKETBASE_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
+function stablePocketBaseId(value: string): string {
+  let result = "";
+  for (let round = 0; result.length < 15; round += 1) {
+    let hash = 0x811c9dc5;
+    const input = `${round}:${value}`;
+    for (let index = 0; index < input.length; index += 1) {
+      hash ^= input.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    for (let digit = 0; digit < 6 && result.length < 15; digit += 1) {
+      result += POCKETBASE_ID_ALPHABET[hash % POCKETBASE_ID_ALPHABET.length];
+      hash = Math.floor(hash / POCKETBASE_ID_ALPHABET.length);
+    }
+  }
+  return result;
+}
+
+export const DEFAULT_CATEGORY_KEYS = [
+  "health",
+  "home",
+  "digital",
+  "devices",
+  "vehicle",
+  "other",
+] as const;
+
+export type DefaultCategoryKey = (typeof DEFAULT_CATEGORY_KEYS)[number];
+
+export function defaultCategoryId(userId: string, key: DefaultCategoryKey): string {
+  return stablePocketBaseId(`${userId}:default-category:${key}`);
+}
+
 function generatePocketBaseId(): string {
   const random = crypto.getRandomValues(new Uint8Array(15));
   return Array.from(
@@ -93,12 +126,12 @@ function generatePocketBaseId(): string {
 }
 
 const DEFAULT_CATEGORIES = [
-  { name: "健康", icon: "heart-pulse", color: "#C65D57" },
-  { name: "家居", icon: "house", color: "#B57B46" },
-  { name: "数字生活", icon: "cloud", color: "#657FA3" },
-  { name: "设备", icon: "cpu", color: "#6E7F68" },
-  { name: "车辆", icon: "car", color: "#8A6E9E" },
-  { name: "其他", icon: "shapes", color: "#77736D" },
+  { key: "health", name: "健康", icon: "heart-pulse", color: "#C65D57" },
+  { key: "home", name: "家居", icon: "house", color: "#B57B46" },
+  { key: "digital", name: "数字生活", icon: "cloud", color: "#657FA3" },
+  { key: "devices", name: "设备", icon: "cpu", color: "#6E7F68" },
+  { key: "vehicle", name: "车辆", icon: "car", color: "#8A6E9E" },
+  { key: "other", name: "其他", icon: "shapes", color: "#77736D" },
 ] as const;
 
 function makeOperation(
@@ -194,14 +227,15 @@ export function createRepositories(
 
           for (const [displayOrder, definition] of DEFAULT_CATEGORIES.entries()) {
             const timestamp = now();
+            const { key, ...values } = definition;
             const category: CategoryRecord = {
-              id: generateRecordId(),
+              id: defaultCategoryId(options.userId, key),
               userId: options.userId,
-              revision: 0,
+              revision: 1,
               createdAt: timestamp,
               updatedAt: timestamp,
               deletedAt: null,
-              ...definition,
+              ...values,
               displayOrder,
               lifecycle: "active",
             };
@@ -209,7 +243,7 @@ export function createRepositories(
             await enqueueOperation(
               db,
               makeOperation(
-                generateOperationId,
+                () => `default-category:${options.userId}:${key}`,
                 options.userId,
                 timestamp,
                 "categories",
@@ -224,14 +258,16 @@ export function createRepositories(
       },
       async create(input) {
         const timestamp = now();
-        const highest = await db.categories
-          .where("userId")
-          .equals(options.userId)
-          .sortBy("displayOrder");
+        const highest = (
+          await db.categories
+            .where("userId")
+            .equals(options.userId)
+            .sortBy("displayOrder")
+        ).filter((category) => !category.deletedAt);
         const category: CategoryRecord = {
           id: generateRecordId(),
           userId: options.userId,
-          revision: 0,
+          revision: 1,
           createdAt: timestamp,
           updatedAt: timestamp,
           deletedAt: null,
@@ -297,6 +333,64 @@ export function createRepositories(
           );
         });
       },
+      async move(categoryId, direction) {
+        await db.transaction("rw", db.categories, db.outbox, async () => {
+          const categories = (
+            await db.categories
+              .where("userId")
+              .equals(options.userId)
+              .sortBy("displayOrder")
+          ).filter((category) => !category.deletedAt);
+          const currentIndex = categories.findIndex(
+            (category) => category.id === categoryId,
+          );
+          const targetIndex = currentIndex + direction;
+          if (currentIndex < 0 || targetIndex < 0 || targetIndex >= categories.length) {
+            return;
+          }
+          const current = categories[currentIndex]!;
+          const target = categories[targetIndex]!;
+          const timestamp = now();
+          const currentPatch = {
+            displayOrder: target.displayOrder,
+            revision: current.revision + 1,
+            updatedAt: timestamp,
+          };
+          const targetPatch = {
+            displayOrder: current.displayOrder,
+            revision: target.revision + 1,
+            updatedAt: timestamp,
+          };
+          await db.categories.update(current.id, currentPatch);
+          await db.categories.update(target.id, targetPatch);
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "categories",
+              current.id,
+              "update",
+              current.revision,
+              currentPatch,
+            ),
+          );
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "categories",
+              target.id,
+              "update",
+              target.revision,
+              targetPatch,
+            ),
+          );
+        });
+      },
       async setArchived(categoryId, archived) {
         await db.transaction("rw", db.categories, db.outbox, async () => {
           const category = await db.categories.get(categoryId);
@@ -333,7 +427,7 @@ export function createRepositories(
         const item: ItemRecord = {
           id: generateRecordId(),
           userId: options.userId,
-          revision: 0,
+          revision: 1,
           createdAt: timestamp,
           updatedAt: timestamp,
           deletedAt: null,
@@ -421,7 +515,7 @@ export function createRepositories(
           const completion: CompletionRecord = {
             id: generateRecordId(),
             userId: options.userId,
-            revision: 0,
+            revision: 1,
             createdAt: timestamp,
             updatedAt: timestamp,
             deletedAt: null,
@@ -671,7 +765,7 @@ export function createRepositories(
         const skip: SkipRecord = {
           id: generateRecordId(),
           userId: options.userId,
-          revision: 0,
+          revision: 1,
           createdAt: timestamp,
           updatedAt: timestamp,
           deletedAt: null,
@@ -719,7 +813,7 @@ export function createRepositories(
     },
     settings: {
       async ensureDefaults() {
-        return db.transaction("rw", db.settings, async () => {
+        return db.transaction("rw", db.settings, db.outbox, async () => {
           const existing = await db.settings.get(options.userId);
           if (existing) {
             return existing;
@@ -728,7 +822,7 @@ export function createRepositories(
           const settings: UserSettingsRecord = {
             id: options.userId,
             userId: options.userId,
-            revision: 0,
+            revision: 1,
             createdAt: timestamp,
             updatedAt: timestamp,
             deletedAt: null,
@@ -739,6 +833,19 @@ export function createRepositories(
             quietHoursEnd: "08:00",
           };
           await db.settings.add(settings);
+          await enqueueOperation(
+            db,
+            makeOperation(
+              () => `default-settings:${options.userId}`,
+              options.userId,
+              timestamp,
+              "settings",
+              options.userId,
+              "create",
+              0,
+              toOperationFields(settings),
+            ),
+          );
           return settings;
         });
       },
@@ -762,9 +869,13 @@ export function createRepositories(
               timestamp,
               "settings",
               options.userId,
-              current.revision === 0 ? "create" : "update",
+              "update",
               current.revision,
-              toOperationFields(settings),
+              toOperationFields({
+                ...requestedPatch,
+                revision: settings.revision,
+                updatedAt: timestamp,
+              }),
             ),
           );
         });

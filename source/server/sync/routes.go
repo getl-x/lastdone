@@ -1,8 +1,10 @@
 package sync
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
@@ -41,5 +43,29 @@ func RegisterRoutes(event *core.ServeEvent) {
 			return apis.NewBadRequestError("sync pull failed", err)
 		}
 		return request.JSON(http.StatusOK, response)
+	}).Bind(apis.RequireAuth("users"))
+
+	event.Router.POST("/api/lastdone/sync/conflicts/{id}/resolve", func(request *core.RequestEvent) error {
+		body := struct {
+			Choice string `json:"choice"`
+		}{}
+		if err := request.BindBody(&body); err != nil {
+			return apis.NewBadRequestError("invalid conflict resolution", err)
+		}
+		service := NewService(NewPocketBaseStore(request.App))
+		conflict, err := service.ResolveConflict(
+			request.Request.Context(),
+			request.Auth.Id,
+			request.Request.PathValue("id"),
+			body.Choice,
+			time.Now().UTC().Format(time.RFC3339Nano),
+		)
+		if errors.Is(err, ErrConflictNotFound) {
+			return apis.NewNotFoundError("conflict not found", err)
+		}
+		if err != nil {
+			return apis.NewBadRequestError("could not resolve conflict", err)
+		}
+		return request.JSON(http.StatusOK, conflict)
 	}).Bind(apis.RequireAuth("users"))
 }

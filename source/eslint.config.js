@@ -8,6 +8,7 @@ export default tseslint.config(
       "**/dist/**",
       "**/node_modules/**",
       "apps/android/**",
+      "apps/web/android/app/src/main/assets/**",
       "server/pb_data/**",
       "server/pb_public/**",
     ],

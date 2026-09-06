@@ -1,13 +1,19 @@
 package sync
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 )
 
 const maxPushOperations = 100
 const maxPullChanges = 500
+const maxPullConflicts = 500
+
+var ErrConflictNotFound = errors.New("conflict not found")
 
 type Service struct {
 	store Store
@@ -71,35 +77,43 @@ func applyOperation(ctx context.Context, store Store, userID string, operation O
 		return OperationResult{}, err
 	}
 
-	if operation.Action == "create" {
-		if exists {
-			return OperationResult{}, fmt.Errorf("document already exists")
-		}
+	action := operation.Action
+	if operation.Action == "create" && !exists {
+		fields := operationDataFields(operation.Fields)
 		document = Document{
 			ID:             operation.EntityID,
 			UserID:         userID,
 			Entity:         operation.Entity,
 			Revision:       1,
-			Fields:         copyMap(operation.Fields),
-			FieldRevisions: make(map[string]int, len(operation.Fields)),
+			Fields:         fields,
+			FieldRevisions: make(map[string]int, len(fields)),
 		}
-		for field := range operation.Fields {
+		for field := range fields {
 			document.FieldRevisions[field] = 1
 		}
 		if err := store.SaveDocument(ctx, document); err != nil {
 			return OperationResult{}, err
 		}
-		if err := saveChange(ctx, store, document, operation.Action, document.Fields); err != nil {
+		if err := saveChange(
+			ctx,
+			store,
+			document,
+			operation.Action,
+			withChangeMetadata(fields, operation.Fields, true),
+		); err != nil {
 			return OperationResult{}, err
 		}
 		return OperationResult{OperationID: operation.ID, Conflicts: []Conflict{}}, nil
+	}
+	if operation.Action == "create" {
+		action = "update"
 	}
 
 	if !exists {
 		return OperationResult{}, fmt.Errorf("document does not exist")
 	}
 
-	fields := operation.Fields
+	fields := operationDataFields(operation.Fields)
 	if operation.Action == "delete" && len(fields) == 0 {
 		fields = map[string]any{"deletedAt": operation.CreatedAt}
 	}
@@ -111,9 +125,14 @@ func applyOperation(ctx context.Context, store Store, userID string, operation O
 
 	conflicts := make([]Conflict, 0)
 	appliedFields := make(map[string]any)
+	settledFields := make(map[string]bool)
 	for _, field := range fieldNames {
 		value := fields[field]
 		if document.FieldRevisions[field] > operation.BaseRevision {
+			if valuesEqual(value, document.Fields[field]) {
+				settledFields[field] = true
+				continue
+			}
 			conflict := Conflict{
 				ID:             operation.ID + ":" + field,
 				UserID:         userID,
@@ -133,6 +152,7 @@ func applyOperation(ctx context.Context, store Store, userID string, operation O
 			continue
 		}
 		appliedFields[field] = value
+		settledFields[field] = true
 	}
 
 	if len(appliedFields) > 0 {
@@ -144,12 +164,66 @@ func applyOperation(ctx context.Context, store Store, userID string, operation O
 		if err := store.SaveDocument(ctx, document); err != nil {
 			return OperationResult{}, err
 		}
-		if err := saveChange(ctx, store, document, operation.Action, appliedFields); err != nil {
+		if err := saveChange(
+			ctx,
+			store,
+			document,
+			action,
+			withChangeMetadata(appliedFields, operation.Fields, false),
+		); err != nil {
+			return OperationResult{}, err
+		}
+	}
+	for field := range settledFields {
+		if err := store.MarkFieldConflictsResolved(
+			ctx,
+			userID,
+			operation.Entity,
+			operation.EntityID,
+			field,
+			operation.CreatedAt,
+		); err != nil {
 			return OperationResult{}, err
 		}
 	}
 
 	return OperationResult{OperationID: operation.ID, Conflicts: conflicts}, nil
+}
+
+func valuesEqual(left any, right any) bool {
+	leftJSON, leftErr := json.Marshal(left)
+	rightJSON, rightErr := json.Marshal(right)
+	return leftErr == nil && rightErr == nil && bytes.Equal(leftJSON, rightJSON)
+}
+
+func operationDataFields(fields map[string]any) map[string]any {
+	result := make(map[string]any, len(fields))
+	for field, value := range fields {
+		switch field {
+		case "id", "userId", "revision", "fieldRevisions", "createdAt", "updatedAt":
+			continue
+		default:
+			result[field] = value
+		}
+	}
+	return result
+}
+
+func withChangeMetadata(
+	fields map[string]any,
+	operationFields map[string]any,
+	includeCreatedAt bool,
+) map[string]any {
+	result := copyMap(fields)
+	if includeCreatedAt {
+		if value, ok := operationFields["createdAt"]; ok {
+			result["createdAt"] = value
+		}
+	}
+	if value, ok := operationFields["updatedAt"]; ok {
+		result["updatedAt"] = value
+	}
+	return result
 }
 
 func saveChange(ctx context.Context, store Store, document Document, action string, fields map[string]any) error {
@@ -183,9 +257,12 @@ func (service *Service) Pull(ctx context.Context, userID string, after int64, li
 	if err != nil {
 		return PullResponse{}, err
 	}
-	conflicts, err := service.store.ListConflicts(ctx, userID)
-	if err != nil {
-		return PullResponse{}, err
+	conflicts := []Conflict{}
+	if !hasMore {
+		conflicts, err = service.store.ListConflicts(ctx, userID, maxPullConflicts)
+		if err != nil {
+			return PullResponse{}, err
+		}
 	}
 	nextSequence := after
 	if len(changes) > 0 {
@@ -198,4 +275,85 @@ func (service *Service) Pull(ctx context.Context, userID string, after int64, li
 		NextSequence: nextSequence,
 		HasMore:      hasMore,
 	}, nil
+}
+
+func (service *Service) ResolveConflict(
+	ctx context.Context,
+	userID string,
+	conflictID string,
+	choice string,
+	resolvedAt string,
+) (Conflict, error) {
+	if userID == "" || conflictID == "" {
+		return Conflict{}, fmt.Errorf("user and conflict id are required")
+	}
+	if choice != "local" && choice != "server" {
+		return Conflict{}, fmt.Errorf("choice must be local or server")
+	}
+	if resolvedAt == "" {
+		return Conflict{}, fmt.Errorf("resolution time is required")
+	}
+
+	var resolved Conflict
+	err := service.store.RunInTransaction(ctx, func(store Store) error {
+		conflict, found, err := store.FindConflict(ctx, userID, conflictID)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return ErrConflictNotFound
+		}
+		if conflict.Status == "resolved" {
+			resolved = conflict
+			return nil
+		}
+
+		document, exists, err := store.FindDocument(
+			ctx,
+			userID,
+			conflict.Entity,
+			conflict.EntityID,
+		)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("conflicted document does not exist")
+		}
+		resolvedValue := document.Fields[conflict.Field]
+		if choice == "local" {
+			resolvedValue = conflict.LocalValue
+		}
+		document.Revision++
+		document.Fields[conflict.Field] = resolvedValue
+		document.FieldRevisions[conflict.Field] = document.Revision
+		if err := store.SaveDocument(ctx, document); err != nil {
+			return err
+		}
+		if err := saveChange(ctx, store, document, "update", map[string]any{
+			conflict.Field: resolvedValue,
+			"updatedAt":    resolvedAt,
+		}); err != nil {
+			return err
+		}
+
+		if err := store.MarkFieldConflictsResolved(
+			ctx,
+			userID,
+			conflict.Entity,
+			conflict.EntityID,
+			conflict.Field,
+			resolvedAt,
+		); err != nil {
+			return err
+		}
+		conflict.Status = "resolved"
+		conflict.ResolvedAt = &resolvedAt
+		resolved = conflict
+		return nil
+	})
+	if err != nil {
+		return Conflict{}, err
+	}
+	return resolved, nil
 }

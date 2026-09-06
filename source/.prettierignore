@@ -4,6 +4,7 @@
 **/playwright-report
 **/test-results
 apps/android
+apps/web/android/app/src/main/assets
 package-lock.json
 server/pb_data
 server/pb_public

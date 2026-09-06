@@ -8,12 +8,23 @@ import { useData } from "../data/DataProvider";
 
 type ScheduleKind = "relative" | "fixed-monthly" | "fixed-yearly";
 
+const REMINDER_OPTIONS = [
+  { value: 30, label: "提前 30 天" },
+  { value: 7, label: "提前 7 天" },
+  { value: 3, label: "提前 3 天" },
+  { value: 1, label: "提前 1 天" },
+  { value: 0, label: "到期当天" },
+] as const;
+
 export function ItemFormPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { db, repositories, userId } = useData();
   const categories = useLiveQuery(
-    () => db.categories.where("userId").equals(userId).sortBy("displayOrder"),
+    async () =>
+      (
+        await db.categories.where("userId").equals(userId).sortBy("displayOrder")
+      ).filter((category) => !category.deletedAt),
     [db, userId],
   );
   const existing = useLiveQuery(() => (id ? db.items.get(id) : undefined), [db, id]);
@@ -30,6 +41,7 @@ export function ItemFormPage() {
   const [previousDate, setPreviousDate] = useState("");
   const [initialDueDate, setInitialDueDate] = useState("");
   const [important, setImportant] = useState(false);
+  const [reminderOffsets, setReminderOffsets] = useState<number[]>([7, 1, 0]);
   const [error, setError] = useState("");
 
   if (existing && initializedId !== existing.id) {
@@ -49,12 +61,17 @@ export function ItemFormPage() {
     setStartMode("due");
     setInitialDueDate(existing.dueDate ?? "");
     setImportant(existing.important);
+    setReminderOffsets(existing.reminderOffsets);
   }
 
   const resolvedCategoryId =
     categoryId ||
     categories?.find((category) => category.lifecycle === "active")?.id ||
     "";
+  const selectableCategories = categories?.filter(
+    (category) =>
+      category.lifecycle === "active" || category.id === existing?.categoryId,
+  );
   const schedule = useMemo<ScheduleRule>(() => {
     if (scheduleKind === "fixed-monthly") {
       return { type: "fixed-monthly", day: monthlyDay };
@@ -79,6 +96,12 @@ export function ItemFormPage() {
     event.preventDefault();
     setError("");
     try {
+      if (important && reminderOffsets.length === 0) {
+        throw new Error("重要事项至少需要选择一个提醒时间");
+      }
+      const selectedReminderOffsets = important
+        ? [...reminderOffsets].sort((left, right) => right - left)
+        : [];
       if (id) {
         await repositories.items.update(id, {
           name,
@@ -86,6 +109,7 @@ export function ItemFormPage() {
           schedule,
           dueDate: preview,
           important,
+          reminderOffsets: selectedReminderOffsets,
         });
         navigate(`/items/${id}`);
         return;
@@ -98,7 +122,7 @@ export function ItemFormPage() {
           ? { previousCompletionDate: previousDate }
           : { initialDueDate }),
         important,
-        reminderOffsets: important ? [7, 1, 0] : [],
+        reminderOffsets: selectedReminderOffsets,
       });
       navigate(`/items/${item.id}`);
     } catch (cause) {
@@ -136,13 +160,16 @@ export function ItemFormPage() {
             value={resolvedCategoryId}
             onChange={(event) => setCategoryId(event.target.value)}
           >
-            {categories
-              ?.filter((category) => category.lifecycle === "active")
-              .map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
+            {selectableCategories?.map((category) => (
+              <option
+                key={category.id}
+                value={category.id}
+                disabled={category.lifecycle === "archived"}
+              >
+                {category.name}
+                {category.lifecycle === "archived" ? "（已归档）" : ""}
+              </option>
+            ))}
           </select>
         </label>
 
@@ -296,8 +323,31 @@ export function ItemFormPage() {
             checked={important}
             onChange={(e) => setImportant(e.target.checked)}
           />
-          <span>重要事项（默认在到期前 7 天、1 天和当天提醒）</span>
+          <span>重要事项</span>
         </label>
+        {important ? (
+          <fieldset>
+            <legend>提醒时间</legend>
+            <div className="reminder-options">
+              {REMINDER_OPTIONS.map((option) => (
+                <label className="check-field" key={option.value}>
+                  <input
+                    type="checkbox"
+                    checked={reminderOffsets.includes(option.value)}
+                    onChange={(event) =>
+                      setReminderOffsets((current) =>
+                        event.target.checked
+                          ? [...new Set([...current, option.value])]
+                          : current.filter((value) => value !== option.value),
+                      )
+                    }
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
         <button className="button button-primary" type="submit">
           保存事项
         </button>

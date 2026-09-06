@@ -40,10 +40,33 @@ describe("outbox", () => {
       await enqueueOperation(db, operation);
     }
 
-    expect((await listPendingOperations(db, 2)).map(({ id }) => id)).toEqual([
+    expect((await listPendingOperations(db, "user-1", 2)).map(({ id }) => id)).toEqual([
       "operation-1",
       "operation-2",
     ]);
+  });
+
+  it("preserves insertion order when operations request the same timestamp", async () => {
+    const sharedTimestamp = "2026-09-05T08:00:00.000Z";
+    for (const id of ["operation-z", "operation-a"]) {
+      await enqueueOperation(db, {
+        id,
+        userId: "user-1",
+        entity: "items",
+        entityId: "item-1",
+        action: "update",
+        baseRevision: 1,
+        fields: { name: id },
+        createdAt: sharedTimestamp,
+        status: "pending",
+        attempts: 0,
+        lastError: null,
+      });
+    }
+
+    const pending = await listPendingOperations(db, "user-1", 10);
+    expect(pending.map(({ id }) => id)).toEqual(["operation-z", "operation-a"]);
+    expect(pending[1]!.createdAt).toBe("2026-09-05T08:00:00.001Z");
   });
 
   it("marks an acknowledged operation as applied", async () => {
@@ -63,10 +86,28 @@ describe("outbox", () => {
 
     await markOperationApplied(db, "operation-1");
 
-    expect(await listPendingOperations(db, 10)).toEqual([]);
+    expect(await listPendingOperations(db, "user-1", 10)).toEqual([]);
     expect(await db.outbox.get("operation-1")).toMatchObject({
       status: "applied",
       appliedAt: expect.any(String),
     });
+  });
+
+  it("does not return another user's pending operations", async () => {
+    await enqueueOperation(db, {
+      id: "operation-other-user",
+      userId: "user-2",
+      entity: "items",
+      entityId: "item-other-user",
+      action: "create",
+      baseRevision: 0,
+      fields: { name: "Other user" },
+      createdAt: "2026-09-05T08:00:00.000Z",
+      status: "pending",
+      attempts: 0,
+      lastError: null,
+    });
+
+    expect(await listPendingOperations(db, "user-1", 10)).toEqual([]);
   });
 });

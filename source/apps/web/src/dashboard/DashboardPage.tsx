@@ -55,7 +55,12 @@ export function DashboardPage({ today = currentLocalDate() }: { today?: string }
       db.completions.where("userId").equals(userId).toArray(),
       db.settings.get(userId),
     ]);
-    return { items, categories, completions, dueSoonDays: settings?.dueSoonDays ?? 7 };
+    return {
+      items,
+      categories: categories.filter((category) => !category.deletedAt),
+      completions,
+      dueSoonDays: settings?.dueSoonDays ?? 7,
+    };
   }, [db, userId]);
 
   const view = useMemo(() => {

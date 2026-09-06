@@ -46,11 +46,22 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
 
   async function execute(): Promise<SyncResult> {
     const result: SyncResult = { pushed: 0, pulled: 0, conflicts: 0 };
-    const pending = await listPendingOperations(options.db, PUSH_LIMIT);
+    const pending = await listPendingOperations(options.db, options.userId, PUSH_LIMIT);
 
     if (pending.length > 0) {
       try {
         const response = await options.transport.push(pending);
+        const pendingIds = new Set(pending.map(({ id }) => id));
+        if (
+          response.appliedOperationIds.some(
+            (operationId) => !pendingIds.has(operationId),
+          )
+        ) {
+          throw new Error("push response acknowledged an unknown operation");
+        }
+        if (response.conflicts.some((conflict) => conflict.userId !== options.userId)) {
+          throw new Error("push response contains a conflict for another user");
+        }
         await options.db.transaction(
           "rw",
           options.db.outbox,
@@ -69,7 +80,9 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
           },
         );
         result.pushed += response.appliedOperationIds.length;
-        result.conflicts += response.conflicts.length;
+        result.conflicts += response.conflicts.filter(
+          (conflict) => conflict.status === "unresolved",
+        ).length;
       } catch (cause) {
         const error = cause instanceof Error ? cause : new Error("unknown sync error");
         await recordPushFailure(options.db, options.userId, pending, error);
@@ -92,7 +105,9 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
         clock(),
       );
       result.pulled += response.changes.length;
-      result.conflicts += response.conflicts.length;
+      result.conflicts += response.conflicts.filter(
+        (conflict) => conflict.status === "unresolved",
+      ).length;
       after = response.nextSequence;
       hasMore = response.hasMore;
     }

@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
 
@@ -104,6 +105,353 @@ func TestDisjointPatchesMergeAndSameFieldConflicts(t *testing.T) {
 	}
 	if document, _ = store.Document("user-1", "items", "item-1"); document.Fields["name"] != "新名称" {
 		t.Fatalf("stale value overwrote current value: %#v", document.Fields)
+	}
+}
+
+func TestRepeatedCreateMergesInsteadOfBlockingSync(t *testing.T) {
+	store := NewMemoryStore()
+	service := NewService(store)
+	ctx := context.Background()
+
+	_, err := service.Push(ctx, "user-1", []Operation{{
+		ID:           "create-settings-device-a",
+		Entity:       "settings",
+		EntityID:     "user-1",
+		Action:       "create",
+		BaseRevision: 0,
+		CreatedAt:    "2026-09-06T08:00:00Z",
+		Fields: map[string]any{
+			"id":          "user-1",
+			"userId":      "user-1",
+			"revision":    0,
+			"createdAt":   "2026-09-06T08:00:00Z",
+			"updatedAt":   "2026-09-06T08:00:00Z",
+			"timeZone":    "Asia/Shanghai",
+			"dueSoonDays": 7,
+		},
+	}})
+	if err != nil {
+		t.Fatalf("first create failed: %v", err)
+	}
+
+	repeated, err := service.Push(ctx, "user-1", []Operation{{
+		ID:           "create-settings-device-b",
+		Entity:       "settings",
+		EntityID:     "user-1",
+		Action:       "create",
+		BaseRevision: 0,
+		CreatedAt:    "2026-09-06T08:01:00Z",
+		Fields: map[string]any{
+			"id":          "user-1",
+			"userId":      "user-1",
+			"revision":    0,
+			"createdAt":   "2026-09-06T08:01:00Z",
+			"updatedAt":   "2026-09-06T08:01:00Z",
+			"timeZone":    "Asia/Shanghai",
+			"dueSoonDays": 14,
+		},
+	}})
+	if err != nil {
+		t.Fatalf("repeated create failed: %v", err)
+	}
+	if len(repeated.Conflicts) != 1 || repeated.Conflicts[0].Field != "dueSoonDays" {
+		t.Fatalf("expected only the changed field to conflict: %#v", repeated.Conflicts)
+	}
+}
+
+func TestConflictCanKeepLocalOrServerValue(t *testing.T) {
+	for _, choice := range []string{"local", "server"} {
+		t.Run(choice, func(t *testing.T) {
+			store := NewMemoryStore()
+			service := NewService(store)
+			ctx := context.Background()
+			_, err := service.Push(ctx, "user-1", []Operation{{
+				ID:           "create-item",
+				Entity:       "items",
+				EntityID:     "item-1",
+				Action:       "create",
+				BaseRevision: 0,
+				CreatedAt:    "2026-09-06T08:00:00Z",
+				Fields:       map[string]any{"name": "初始名称"},
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = service.Push(ctx, "user-1", []Operation{
+				{
+					ID:           "rename-server",
+					Entity:       "items",
+					EntityID:     "item-1",
+					Action:       "update",
+					BaseRevision: 1,
+					CreatedAt:    "2026-09-06T08:01:00Z",
+					Fields:       map[string]any{"name": "服务器名称"},
+				},
+				{
+					ID:           "rename-local",
+					Entity:       "items",
+					EntityID:     "item-1",
+					Action:       "update",
+					BaseRevision: 1,
+					CreatedAt:    "2026-09-06T08:02:00Z",
+					Fields:       map[string]any{"name": "本机名称"},
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			resolved, err := service.ResolveConflict(
+				ctx,
+				"user-1",
+				"rename-local:name",
+				choice,
+				"2026-09-06T08:03:00Z",
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resolved.Status != "resolved" {
+				t.Fatalf("conflict was not resolved: %#v", resolved)
+			}
+			if resolved.ResolvedAt == nil || *resolved.ResolvedAt != "2026-09-06T08:03:00Z" {
+				t.Fatalf("conflict resolution time is missing: %#v", resolved)
+			}
+			document, _ := store.Document("user-1", "items", "item-1")
+			expected := "服务器名称"
+			if choice == "local" {
+				expected = "本机名称"
+			}
+			if document.Fields["name"] != expected {
+				t.Fatalf("unexpected resolved value: %#v", document.Fields)
+			}
+			if document.Revision != 3 {
+				t.Fatalf("resolution did not create a new revision: %#v", document)
+			}
+			changes := store.Changes()
+			resolution := changes[len(changes)-1]
+			if resolution.Fields["name"] != expected {
+				t.Fatalf("resolved value was not published: %#v", resolution)
+			}
+			if resolution.Fields["updatedAt"] != "2026-09-06T08:03:00Z" {
+				t.Fatalf("resolution timestamp was not published: %#v", resolution)
+			}
+			pulled, err := service.Pull(ctx, "user-1", 0, 500)
+			if err != nil {
+				t.Fatal(err)
+			}
+			foundResolved := false
+			for _, conflict := range pulled.Conflicts {
+				if conflict.ID == "rename-local:name" && conflict.Status == "resolved" {
+					foundResolved = true
+				}
+			}
+			if !foundResolved {
+				t.Fatalf("resolved conflict was not propagated: %#v", pulled.Conflicts)
+			}
+		})
+	}
+}
+
+func TestNewerSuccessfulFieldUpdateSupersedesAnOlderConflict(t *testing.T) {
+	store := NewMemoryStore()
+	service := NewService(store)
+	ctx := context.Background()
+	_, err := service.Push(ctx, "user-1", []Operation{
+		{
+			ID:           "create-item",
+			Entity:       "items",
+			EntityID:     "item-1",
+			Action:       "create",
+			BaseRevision: 0,
+			CreatedAt:    "2026-09-06T08:00:00Z",
+			Fields:       map[string]any{"name": "初始名称"},
+		},
+		{
+			ID:           "server-rename",
+			Entity:       "items",
+			EntityID:     "item-1",
+			Action:       "update",
+			BaseRevision: 1,
+			CreatedAt:    "2026-09-06T08:01:00Z",
+			Fields:       map[string]any{"name": "服务器名称"},
+		},
+		{
+			ID:           "stale-local-rename",
+			Entity:       "items",
+			EntityID:     "item-1",
+			Action:       "update",
+			BaseRevision: 1,
+			CreatedAt:    "2026-09-06T08:02:00Z",
+			Fields:       map[string]any{"name": "旧本机名称"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = service.Push(ctx, "user-1", []Operation{{
+		ID:           "new-local-rename",
+		Entity:       "items",
+		EntityID:     "item-1",
+		Action:       "update",
+		BaseRevision: 2,
+		CreatedAt:    "2026-09-06T08:03:00Z",
+		Fields:       map[string]any{"name": "最新名称"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	document, _ := store.Document("user-1", "items", "item-1")
+	if document.Fields["name"] != "最新名称" {
+		t.Fatalf("newer value was not applied: %#v", document)
+	}
+	conflict, found, err := store.FindConflict(ctx, "user-1", "stale-local-rename:name")
+	if err != nil || !found {
+		t.Fatalf("older conflict is missing: found=%v err=%v", found, err)
+	}
+	if conflict.Status != "resolved" || conflict.ResolvedAt == nil {
+		t.Fatalf("older conflict was not superseded: %#v", conflict)
+	}
+}
+
+func TestMatchingServerValueSupersedesAnOlderConflictWithoutANewRevision(t *testing.T) {
+	store := NewMemoryStore()
+	service := NewService(store)
+	ctx := context.Background()
+	_, err := service.Push(ctx, "user-1", []Operation{
+		{
+			ID:           "create-item",
+			Entity:       "items",
+			EntityID:     "item-1",
+			Action:       "create",
+			BaseRevision: 0,
+			CreatedAt:    "2026-09-06T08:00:00Z",
+			Fields:       map[string]any{"name": "初始名称"},
+		},
+		{
+			ID:           "server-rename",
+			Entity:       "items",
+			EntityID:     "item-1",
+			Action:       "update",
+			BaseRevision: 1,
+			CreatedAt:    "2026-09-06T08:01:00Z",
+			Fields:       map[string]any{"name": "服务器名称"},
+		},
+		{
+			ID:           "stale-local-rename",
+			Entity:       "items",
+			EntityID:     "item-1",
+			Action:       "update",
+			BaseRevision: 1,
+			CreatedAt:    "2026-09-06T08:02:00Z",
+			Fields:       map[string]any{"name": "旧本机名称"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = service.Push(ctx, "user-1", []Operation{{
+		ID:           "accept-server-name",
+		Entity:       "items",
+		EntityID:     "item-1",
+		Action:       "update",
+		BaseRevision: 1,
+		CreatedAt:    "2026-09-06T08:03:00Z",
+		Fields:       map[string]any{"name": "服务器名称"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	document, _ := store.Document("user-1", "items", "item-1")
+	if document.Revision != 2 || document.Fields["name"] != "服务器名称" {
+		t.Fatalf("matching value created an unnecessary revision: %#v", document)
+	}
+	conflict, found, err := store.FindConflict(ctx, "user-1", "stale-local-rename:name")
+	if err != nil || !found || conflict.Status != "resolved" {
+		t.Fatalf("matching value did not supersede the conflict: %#v err=%v", conflict, err)
+	}
+}
+
+func TestPullPrioritizesNewUnresolvedConflictsOverResolvedHistory(t *testing.T) {
+	store := NewMemoryStore()
+	service := NewService(store)
+	ctx := context.Background()
+	for index := 0; index < maxPullConflicts; index++ {
+		err := store.SaveConflict(ctx, Conflict{
+			ID:        fmt.Sprintf("resolved-%03d", index),
+			UserID:    "user-1",
+			Status:    "resolved",
+			CreatedAt: fmt.Sprintf("2026-09-05T%02d:%02d:00Z", index/60, index%60),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.SaveConflict(ctx, Conflict{
+		ID:        "new-unresolved",
+		UserID:    "user-1",
+		Status:    "unresolved",
+		CreatedAt: "2026-09-06T08:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	pulled, err := service.Pull(ctx, "user-1", 0, maxPullChanges)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pulled.Conflicts) != maxPullConflicts {
+		t.Fatalf("unexpected conflict page size: %d", len(pulled.Conflicts))
+	}
+	if pulled.Conflicts[0].ID != "new-unresolved" {
+		t.Fatalf("new unresolved conflict was hidden: %#v", pulled.Conflicts[0])
+	}
+}
+
+func TestPullReturnsConflictsOnlyOnTheFinalChangePage(t *testing.T) {
+	store := NewMemoryStore()
+	service := NewService(store)
+	ctx := context.Background()
+	for sequence := int64(1); sequence <= 2; sequence++ {
+		if err := store.SaveChange(ctx, Change{
+			Sequence: sequence,
+			UserID:   "user-1",
+			Entity:   "items",
+			EntityID: fmt.Sprintf("item-%d", sequence),
+			Action:   "update",
+			Revision: 1,
+			Fields:   map[string]any{"name": "事项"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.SaveConflict(ctx, Conflict{
+		ID:        "conflict-1",
+		UserID:    "user-1",
+		Status:    "unresolved",
+		CreatedAt: "2026-09-06T08:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := service.Pull(ctx, "user-1", 0, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first.HasMore || len(first.Conflicts) != 0 {
+		t.Fatalf("non-final page included conflicts: %#v", first)
+	}
+
+	final, err := service.Pull(ctx, "user-1", first.NextSequence, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if final.HasMore || len(final.Conflicts) != 1 {
+		t.Fatalf("final page did not include conflicts: %#v", final)
 	}
 }
 

@@ -45,6 +45,89 @@ describe("offline repositories", () => {
     expect(await db.outbox.count()).toBe(6);
   });
 
+  it("uses the same default category and operation ids on every device", async () => {
+    const otherDb = new LastDoneDatabase(`lastdone-test-other-${crypto.randomUUID()}`);
+    try {
+      const first = createRepositories(db, {
+        userId: USER_ID,
+        now: () => NOW,
+        generateId: sequentialIds(),
+      });
+      const second = createRepositories(otherDb, {
+        userId: USER_ID,
+        now: () => "2026-09-06T08:00:00.000Z",
+        generateId: sequentialIds(),
+      });
+
+      await first.categories.ensureDefaults();
+      await second.categories.ensureDefaults();
+
+      const firstCategories = await db.categories.orderBy("displayOrder").toArray();
+      const secondCategories = await otherDb.categories
+        .orderBy("displayOrder")
+        .toArray();
+      expect(firstCategories.map(({ id }) => id)).toEqual(
+        secondCategories.map(({ id }) => id),
+      );
+
+      const firstOperations = await db.outbox.orderBy("createdAt").toArray();
+      const secondOperations = await otherDb.outbox.orderBy("createdAt").toArray();
+      expect(firstOperations.map(({ id }) => id)).toEqual(
+        secondOperations.map(({ id }) => id),
+      );
+    } finally {
+      await otherDb.delete();
+    }
+  });
+
+  it("edits and reorders categories without duplicate display positions", async () => {
+    const repositories = createRepositories(db, {
+      userId: USER_ID,
+      now: () => NOW,
+      generateId: sequentialIds(),
+    });
+    await repositories.categories.ensureDefaults();
+    const before = await db.categories.orderBy("displayOrder").toArray();
+
+    await repositories.categories.move(before[1]!.id, -1);
+    await repositories.categories.update(before[1]!.id, {
+      name: "家庭维护",
+      icon: "house",
+      color: "#123456",
+    });
+
+    const after = await db.categories.orderBy("displayOrder").toArray();
+    expect(after[0]).toMatchObject({
+      id: before[1]!.id,
+      name: "家庭维护",
+      color: "#123456",
+    });
+    expect(new Set(after.map(({ displayOrder }) => displayOrder)).size).toBe(
+      after.length,
+    );
+  });
+
+  it("skips category tombstones when reordering visible categories", async () => {
+    const repositories = createRepositories(db, {
+      userId: USER_ID,
+      now: () => NOW,
+      generateId: sequentialIds(),
+    });
+    await repositories.categories.ensureDefaults();
+    const before = await db.categories.orderBy("displayOrder").toArray();
+    await db.categories.update(before[1]!.id, { deletedAt: NOW });
+
+    await repositories.categories.move(before[0]!.id, 1);
+
+    const visible = (await db.categories.orderBy("displayOrder").toArray()).filter(
+      (category) => !category.deletedAt,
+    );
+    expect(visible.slice(0, 2).map(({ id }) => id)).toEqual([
+      before[2]!.id,
+      before[0]!.id,
+    ]);
+  });
+
   it("creates an item and its operation in one transaction", async () => {
     const repositories = createRepositories(db, {
       userId: USER_ID,
@@ -68,8 +151,37 @@ describe("offline repositories", () => {
       entity: "items",
       entityId: item.id,
       action: "create",
+      baseRevision: 0,
       status: "pending",
     });
+  });
+
+  it("bases an offline edit on the revision created with a new item", async () => {
+    const repositories = createRepositories(db, {
+      userId: USER_ID,
+      now: () => NOW,
+      generateId: sequentialIds(),
+    });
+    const item = await repositories.items.create({
+      name: "备份电脑",
+      categoryId: "category-digital",
+      schedule: { type: "relative", every: 30, unit: "days" },
+      initialDueDate: "2026-09-30",
+      important: false,
+      reminderOffsets: [],
+    });
+
+    await repositories.items.update(item.id, { important: true });
+
+    expect(item.revision).toBe(1);
+    expect((await db.items.get(item.id))?.revision).toBe(2);
+    const operations = await db.outbox.where("entityId").equals(item.id).toArray();
+    expect(
+      operations.map(({ action, baseRevision }) => ({ action, baseRevision })),
+    ).toEqual([
+      { action: "create", baseRevision: 0 },
+      { action: "update", baseRevision: 1 },
+    ]);
   });
 
   it("rolls back the item if its outbox write fails", async () => {
@@ -212,20 +324,66 @@ describe("offline repositories", () => {
       generateId: sequentialIds(),
     });
 
+    const defaults = await repositories.settings.ensureDefaults();
     const first = await repositories.settings.update({ dueSoonDays: 10 });
     const second = await repositories.settings.update({ digestTime: "08:30" });
 
-    expect(first.revision).toBe(1);
-    expect(second).toMatchObject({ revision: 2, dueSoonDays: 10, digestTime: "08:30" });
+    expect(defaults.revision).toBe(1);
+    expect(first.revision).toBe(2);
+    expect(second).toMatchObject({ revision: 3, dueSoonDays: 10, digestTime: "08:30" });
     const operations = await db.outbox
       .where("entity")
       .equals("settings")
       .sortBy("createdAt");
     expect(
-      operations.map(({ action, baseRevision }) => ({ action, baseRevision })),
+      operations.map(({ action, baseRevision, fields }) => ({
+        action,
+        baseRevision,
+        businessFields: Object.keys(fields).filter(
+          (field) =>
+            !["id", "userId", "revision", "createdAt", "updatedAt"].includes(field),
+        ),
+      })),
     ).toEqual([
-      { action: "create", baseRevision: 0 },
-      { action: "update", baseRevision: 1 },
+      {
+        action: "create",
+        baseRevision: 0,
+        businessFields: [
+          "deletedAt",
+          "timeZone",
+          "dueSoonDays",
+          "digestTime",
+          "quietHoursStart",
+          "quietHoursEnd",
+        ],
+      },
+      { action: "update", baseRevision: 1, businessFields: ["dueSoonDays"] },
+      { action: "update", baseRevision: 2, businessFields: ["digestTime"] },
     ]);
+  });
+
+  it("uses the same default settings operation id on every device", async () => {
+    const otherDb = new LastDoneDatabase(`lastdone-settings-${crypto.randomUUID()}`);
+    try {
+      const first = createRepositories(db, {
+        userId: USER_ID,
+        now: () => NOW,
+        generateId: sequentialIds(),
+      });
+      const second = createRepositories(otherDb, {
+        userId: USER_ID,
+        now: () => "2026-09-06T08:00:00.000Z",
+        generateId: sequentialIds(),
+      });
+
+      await first.settings.ensureDefaults();
+      await second.settings.ensureDefaults();
+
+      expect((await db.outbox.where("entity").equals("settings").first())?.id).toBe(
+        (await otherDb.outbox.where("entity").equals("settings").first())?.id,
+      );
+    } finally {
+      await otherDb.delete();
+    }
   });
 });

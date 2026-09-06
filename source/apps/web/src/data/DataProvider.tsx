@@ -1,8 +1,10 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   type PropsWithChildren,
 } from "react";
 
@@ -12,7 +14,7 @@ import {
   type IdGenerator,
   type Repositories,
 } from "@lastdone/storage";
-import { createSyncEngine, type SyncTransport } from "@lastdone/sync";
+import { createSyncEngine, type SyncEngine, type SyncTransport } from "@lastdone/sync";
 
 import { dispatchSyncCompleted } from "../native/events";
 
@@ -20,6 +22,7 @@ interface DataContextValue {
   db: LastDoneDatabase;
   repositories: Repositories;
   userId: string;
+  resolveConflict(conflictId: string, choice: "local" | "server"): Promise<void>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -54,6 +57,7 @@ export function DataProvider({
       }),
     [database, generateOperationId, generateRecordId, now, userId],
   );
+  const syncEngineRef = useRef<SyncEngine | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -78,6 +82,7 @@ export function DataProvider({
       transport: syncTransport,
       onCompleted: dispatchSyncCompleted,
     });
+    syncEngineRef.current = engine;
     const run = () => {
       void engine.run().catch(() => {
         // The engine persists a recoverable error and retries while active.
@@ -96,6 +101,9 @@ export function DataProvider({
     engine.start();
 
     return () => {
+      if (syncEngineRef.current === engine) {
+        syncEngineRef.current = null;
+      }
       engine.stop();
       window.removeEventListener("online", run);
       document.removeEventListener("visibilitychange", handleVisibility);
@@ -103,9 +111,37 @@ export function DataProvider({
     };
   }, [database, syncTransport, userId]);
 
+  const resolveConflict = useCallback(
+    async (conflictId: string, choice: "local" | "server") => {
+      if (!syncTransport?.resolveConflict) {
+        throw new Error("conflict resolution requires an online server");
+      }
+      const conflict = await database.conflicts.get(conflictId);
+      if (!conflict || conflict.userId !== userId) {
+        throw new Error("conflict does not belong to the signed-in user");
+      }
+      const resolved = await syncTransport.resolveConflict(conflictId, choice);
+      if (
+        resolved.id !== conflictId ||
+        resolved.userId !== userId ||
+        resolved.status !== "resolved"
+      ) {
+        throw new Error("server returned an invalid conflict resolution");
+      }
+      await database.conflicts.update(conflictId, {
+        status: "resolved",
+        resolvedAt: resolved.resolvedAt ?? new Date().toISOString(),
+      });
+      void syncEngineRef.current?.run().catch(() => {
+        // The server accepted the resolution; the engine will retry pulling its change.
+      });
+    },
+    [database, syncTransport, userId],
+  );
+
   const value = useMemo(
-    () => ({ db: database, repositories, userId }),
-    [database, repositories, userId],
+    () => ({ db: database, repositories, resolveConflict, userId }),
+    [database, repositories, resolveConflict, userId],
   );
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

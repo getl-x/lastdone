@@ -204,10 +204,50 @@ func (store *PocketBaseStore) SaveConflict(_ context.Context, conflict Conflict)
 	record.Set("serverValue", conflict.ServerValue)
 	record.Set("serverRevision", conflict.ServerRevision)
 	record.Set("status", conflict.Status)
-	if conflict.ResolvedAt != "" {
-		record.Set("resolvedAt", conflict.ResolvedAt)
+	if conflict.ResolvedAt != nil {
+		record.Set("resolvedAt", *conflict.ResolvedAt)
 	}
 	return store.app.Save(record)
+}
+
+func (store *PocketBaseStore) FindConflict(_ context.Context, userID string, conflictID string) (Conflict, bool, error) {
+	record, err := store.app.FindFirstRecordByFilter(
+		"sync_conflicts",
+		"user={:user} && conflictId={:conflictId}",
+		dbx.Params{"user": userID, "conflictId": conflictID},
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Conflict{}, false, nil
+	}
+	if err != nil {
+		return Conflict{}, false, err
+	}
+	return conflictFromRecord(record, userID), true, nil
+}
+
+func (store *PocketBaseStore) MarkFieldConflictsResolved(_ context.Context, userID string, entity string, entityID string, field string, resolvedAt string) error {
+	records, err := store.app.FindRecordsByFilter(
+		"sync_conflicts",
+		"user={:user} && entity={:entity} && entityId={:entityId} && field={:field} && status='unresolved'",
+		"created",
+		1000,
+		0,
+		dbx.Params{
+			"user": userID, "entity": entity, "entityId": entityID, "field": field,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		record.Set("status", "resolved")
+		record.Set("resolvedAt", resolvedAt)
+		record.Set("revision", record.GetInt("revision")+1)
+		if err := store.app.Save(record); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (store *PocketBaseStore) ListChanges(_ context.Context, userID string, after int64, limit int) ([]Change, bool, error) {
@@ -245,12 +285,12 @@ func (store *PocketBaseStore) ListChanges(_ context.Context, userID string, afte
 	return changes, hasMore, nil
 }
 
-func (store *PocketBaseStore) ListConflicts(_ context.Context, userID string) ([]Conflict, error) {
+func (store *PocketBaseStore) ListConflicts(_ context.Context, userID string, limit int) ([]Conflict, error) {
 	records, err := store.app.FindRecordsByFilter(
 		"sync_conflicts",
-		"user={:user} && status='unresolved'",
-		"created",
-		500,
+		"user={:user}",
+		"-status,-created",
+		limit,
 		0,
 		dbx.Params{"user": userID},
 	)
@@ -259,21 +299,29 @@ func (store *PocketBaseStore) ListConflicts(_ context.Context, userID string) ([
 	}
 	conflicts := make([]Conflict, 0, len(records))
 	for _, record := range records {
-		conflicts = append(conflicts, Conflict{
-			ID:             record.GetString("conflictId"),
-			UserID:         userID,
-			Entity:         record.GetString("entity"),
-			EntityID:       record.GetString("entityId"),
-			Field:          record.GetString("field"),
-			LocalValue:     record.Get("localValue"),
-			ServerValue:    record.Get("serverValue"),
-			ServerRevision: record.GetInt("serverRevision"),
-			Status:         record.GetString("status"),
-			CreatedAt:      record.GetString("created"),
-			ResolvedAt:     record.GetString("resolvedAt"),
-		})
+		conflicts = append(conflicts, conflictFromRecord(record, userID))
 	}
 	return conflicts, nil
+}
+
+func conflictFromRecord(record *core.Record, userID string) Conflict {
+	var resolvedAt *string
+	if value := record.GetString("resolvedAt"); value != "" {
+		resolvedAt = &value
+	}
+	return Conflict{
+		ID:             record.GetString("conflictId"),
+		UserID:         userID,
+		Entity:         record.GetString("entity"),
+		EntityID:       record.GetString("entityId"),
+		Field:          record.GetString("field"),
+		LocalValue:     record.Get("localValue"),
+		ServerValue:    record.Get("serverValue"),
+		ServerRevision: record.GetInt("serverRevision"),
+		Status:         record.GetString("status"),
+		CreatedAt:      record.GetString("created"),
+		ResolvedAt:     resolvedAt,
+	}
 }
 
 func decodeJSON(value any, target any) error {

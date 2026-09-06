@@ -29,6 +29,10 @@ export interface PullResponse {
 export interface SyncTransport {
   push(operations: SyncOperation[]): Promise<PushResponse>;
   pull(after: number, limit: number): Promise<PullResponse>;
+  resolveConflict?(
+    conflictId: string,
+    choice: "local" | "server",
+  ): Promise<ConflictRecord>;
 }
 
 export interface SyncResult {
