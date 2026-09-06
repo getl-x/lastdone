@@ -102,8 +102,11 @@ jobs:
           aab="release/lastdone-${LASTDONE_VERSION_NAME}-android.aab"
           cp source/apps/web/android/app/build/outputs/apk/release/app-release.apk "$apk"
           cp source/apps/web/android/app/build/outputs/bundle/release/app-release.aab "$aab"
-          sha256sum "$apk" > "${apk}.sha256"
-          sha256sum "$aab" > "${aab}.sha256"
+          (
+            cd release
+            sha256sum "$(basename "$apk")" > "$(basename "${apk}.sha256")"
+            sha256sum "$(basename "$aab")" > "$(basename "${aab}.sha256")"
+          )
 
       - name: Create or update GitHub release
         env:
