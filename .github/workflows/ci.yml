@@ -1,0 +1,77 @@
+name: Continuous integration
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+
+      - name: Install dependencies
+        working-directory: source
+        run: npm ci
+
+      - name: Check formatting
+        working-directory: source
+        run: npm run format:check
+
+      - name: Lint
+        working-directory: source
+        run: npm run lint
+
+      - name: Type check
+        working-directory: source
+        run: npm run typecheck
+
+      - name: Run unit tests
+        working-directory: source
+        run: npm test
+
+      - name: Build PWA
+        working-directory: source
+        run: npm run build --workspace @lastdone/web
+
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.x"
+          cache-dependency-path: source/server/go.sum
+
+      - name: Check Go formatting
+        working-directory: source/server
+        shell: bash
+        run: test -z "$(gofmt -l .)"
+
+      - name: Run Go vet
+        working-directory: source/server
+        run: go vet ./...
+
+      - name: Run Go tests
+        working-directory: source/server
+        run: go test ./...

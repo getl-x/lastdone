@@ -1,6 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import {
   classifyItem,
@@ -46,6 +46,8 @@ export function DashboardPage({ today = currentLocalDate() }: { today?: string }
   const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [undoCompletionId, setUndoCompletionId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const attentionOnly = searchParams.get("filter") === "attention";
   const data = useLiveQuery(async () => {
     const [items, categories, completions, settings] = await Promise.all([
       db.items.where("userId").equals(userId).toArray(),
@@ -87,6 +89,14 @@ export function DashboardPage({ today = currentLocalDate() }: { today?: string }
         dueSoonDays: data.dueSoonDays,
         lifecycle: item.lifecycle,
       });
+      if (
+        attentionOnly &&
+        status !== "overdue" &&
+        status !== "due-today" &&
+        status !== "due-soon"
+      ) {
+        continue;
+      }
       const values = groups.get(status) ?? [];
       values.push(item);
       groups.set(status, values);
@@ -94,7 +104,7 @@ export function DashboardPage({ today = currentLocalDate() }: { today?: string }
     }
     for (const values of groups.values()) values.sort(compareItems);
     return { groups, counts };
-  }, [categoryId, data, query, today]);
+  }, [attentionOnly, categoryId, data, query, today]);
 
   async function complete(item: ItemRecord) {
     const completion = await repositories.items.complete(item.id, {
@@ -145,6 +155,15 @@ export function DashboardPage({ today = currentLocalDate() }: { today?: string }
           </select>
         </label>
       </section>
+
+      {attentionOnly ? (
+        <div className="active-filter-notice">
+          <span>只显示逾期、今天到期和即将到期的事项</span>
+          <button type="button" onClick={() => setSearchParams({})}>
+            显示全部
+          </button>
+        </div>
+      ) : null}
 
       {!data ? <p className="loading-state">正在读取本地数据…</p> : null}
       {view && [...view.groups.values()].flat().length === 0 ? (

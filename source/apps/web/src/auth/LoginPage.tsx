@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { Navigate } from "react-router";
+import { Navigate, useLocation } from "react-router";
 
 import { useAuth } from "./AuthProvider";
 
 export function LoginPage() {
   const { user, status, login } = useAuth();
+  const location = useLocation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{
@@ -13,8 +14,14 @@ export function LoginPage() {
     form?: string;
   }>({});
 
-  if (user && status !== "offline-authenticated") {
-    return <Navigate to="/" replace />;
+  const requestedRoute = (location.state as { from?: unknown } | null)?.from;
+  const destination =
+    typeof requestedRoute === "string" && requestedRoute.startsWith("/")
+      ? requestedRoute
+      : "/";
+
+  if (user) {
+    return <Navigate to={destination} replace />;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

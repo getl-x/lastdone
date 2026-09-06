@@ -1,5 +1,5 @@
 import PocketBase, { type RecordModel } from "pocketbase";
-import { useMemo, type PropsWithChildren } from "react";
+import { useEffect, useMemo, type PropsWithChildren } from "react";
 
 import { HttpSyncTransport, type SyncTransport } from "@lastdone/sync";
 
@@ -10,6 +10,10 @@ import {
   type AuthUser,
 } from "../auth/AuthProvider";
 import { DataProvider } from "../data/DataProvider";
+import { AndroidNotificationClient } from "../native/androidNotificationClient";
+import { AndroidNotificationCoordinator } from "../native/AndroidNotificationCoordinator";
+import { clearAndroidNotifications } from "../native/androidNotificationScheduler";
+import { RuntimeConfigProvider, type RuntimeConfig } from "../native/serverOrigin";
 import { BrowserNotificationClient } from "../notifications/client";
 import { NotificationProvider } from "../notifications/NotificationProvider";
 
@@ -49,8 +53,14 @@ function createPocketBaseAuthClient(pocketBase: PocketBase): AuthClient {
   };
 }
 
-export function AppProviders({ children }: PropsWithChildren) {
-  const pocketBase = useMemo(() => new PocketBase(window.location.origin), []);
+export function AppProviders({
+  children,
+  runtimeConfig,
+}: PropsWithChildren<{ runtimeConfig: RuntimeConfig }>) {
+  const pocketBase = useMemo(
+    () => new PocketBase(runtimeConfig.serverOrigin),
+    [runtimeConfig.serverOrigin],
+  );
   const authClient = useMemo(
     () => createPocketBaseAuthClient(pocketBase),
     [pocketBase],
@@ -58,33 +68,54 @@ export function AppProviders({ children }: PropsWithChildren) {
   const syncTransport = useMemo(
     () =>
       new HttpSyncTransport({
+        baseUrl: runtimeConfig.serverOrigin,
         getToken: () => pocketBase.authStore.token || null,
       }),
-    [pocketBase],
+    [pocketBase, runtimeConfig.serverOrigin],
   );
   const notificationClient = useMemo(
     () =>
-      new BrowserNotificationClient({
-        getToken: () => pocketBase.authStore.token || null,
-      }),
-    [pocketBase],
+      runtimeConfig.isAndroid
+        ? new AndroidNotificationClient()
+        : new BrowserNotificationClient({
+            baseUrl: runtimeConfig.serverOrigin,
+            getToken: () => pocketBase.authStore.token || null,
+          }),
+    [pocketBase, runtimeConfig.isAndroid, runtimeConfig.serverOrigin],
   );
   return (
-    <AuthProvider client={authClient}>
-      <NotificationProvider client={notificationClient}>
-        <AuthenticatedData syncTransport={syncTransport}>{children}</AuthenticatedData>
-      </NotificationProvider>
-    </AuthProvider>
+    <RuntimeConfigProvider value={runtimeConfig}>
+      <AuthProvider client={authClient}>
+        <NotificationProvider client={notificationClient}>
+          <AuthenticatedData
+            isAndroid={runtimeConfig.isAndroid}
+            syncTransport={syncTransport}
+          >
+            {children}
+          </AuthenticatedData>
+        </NotificationProvider>
+      </AuthProvider>
+    </RuntimeConfigProvider>
   );
 }
 
 function AuthenticatedData({
   children,
+  isAndroid,
   syncTransport,
-}: PropsWithChildren<{ syncTransport: SyncTransport }>) {
+}: PropsWithChildren<{ isAndroid: boolean; syncTransport: SyncTransport }>) {
   const { user } = useAuth();
+  useEffect(() => {
+    if (isAndroid && !user) {
+      void clearAndroidNotifications().catch(() => {
+        // The next authenticated reconciliation or explicit disable retries cleanup.
+      });
+    }
+  }, [isAndroid, user]);
+
   return user ? (
     <DataProvider userId={user.id} syncTransport={syncTransport}>
+      {isAndroid ? <AndroidNotificationCoordinator /> : null}
       {children}
     </DataProvider>
   ) : (

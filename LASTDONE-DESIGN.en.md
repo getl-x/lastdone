@@ -494,21 +494,17 @@ backup growth is small.
 The planned repository layout is:
 
     lastdone/
-    ├── apps/
-    │   ├── web/
-    │   └── android/
-    ├── server/
-    │   ├── main.go
-    │   ├── sync/
-    │   ├── notifications/
-    │   └── migrations/
-    ├── packages/
-    │   ├── core/
-    │   └── contracts/
+    ├── source/
+    │   ├── apps/web/
+    │   │   └── android/
+    │   ├── server/
+    │   └── packages/
     ├── deploy/
-    │   ├── compose.yaml
-    │   ├── .env.example
-    │   └── openresty.conf
+    │   └── lastdone.env.example
+    ├── docs/
+    │   ├── en/
+    │   └── zh-CN/
+    ├── compose.yml
     ├── Dockerfile
     └── .github/workflows/
 
@@ -545,14 +541,14 @@ A representative Compose configuration is:
         ports:
           - "127.0.0.1:8090:8090"
         volumes:
-          - /opt/lastdone/data:/pb/pb_data
+          - lastdone_data:/pb/pb_data
         env_file:
           - .env
         environment:
           TZ: Asia/Shanghai
           GOMEMLIMIT: 384MiB
         healthcheck:
-          test: ["CMD", "/app/lastdone", "healthcheck"]
+          test: ["CMD", "/usr/local/bin/lastdone", "healthcheck"]
           interval: 30s
           timeout: 5s
           retries: 3
@@ -579,28 +575,16 @@ The target production path is:
     127.0.0.1:8090 / LastDone container
        |
        v
-    /opt/lastdone/data
+    /pb/pb_data in the persistent named volume
 
 The container port is never bound to a public interface.
 
-The supplied OpenResty example:
-
-- forwards the real client IP, host, and HTTPS protocol;
-- disables proxy buffering and increases read timeout for PocketBase realtime
-  event streams;
-- disables caching for APIs and authentication;
-- revalidates the service worker;
-- permits long caching for immutable hashed assets;
-- blocks the PocketBase administration interface from public access.
-
-Administrative access uses an SSH tunnel to 127.0.0.1:8090. The administrator
-creates the first PocketBase superuser through a secure deployment command or
-the tunneled administration setup, then creates the single LastDone application
-user. Administrator passwords are never stored in Compose or application
-environment variables.
-
-Cloudflare, OpenResty, and PocketBase rate limits protect public authentication.
-PocketBase settings encryption is enabled with a random runtime secret.
+The repository deliberately does not install or manage OpenResty configuration.
+The owner configures the existing 1Panel website to proxy to
+`127.0.0.1:8090`, and manages HTTPS, Cloudflare policy, and access to the
+PocketBase administration route through the 1Panel and Cloudflare interfaces.
+Administrator passwords are never stored in Compose or application environment
+variables.
 
 ## 13. Continuous Integration and Releases
 
@@ -724,7 +708,7 @@ Development follows the user-facing platform priorities.
 ### Phase 3: Production Distribution
 
 - hardened Docker image;
-- Compose and OpenResty examples;
+- Compose and bilingual 1Panel deployment documentation;
 - automatic backup and upgrade path;
 - GitHub Actions;
 - multi-architecture Docker Hub releases;
@@ -753,7 +737,8 @@ Version 1 is complete when:
 - amd64 and arm64 images are published to Docker Hub;
 - a signed APK is attached to the GitHub Release;
 - upgrades create recoverable backups before migrations;
-- the public reverse proxy cannot reach the PocketBase administration interface;
+- the container remains bound to loopback behind the owner's 1Panel reverse
+  proxy;
 - JSON export can restore the complete application data set.
 
 ## 19. Explicitly Deferred Work

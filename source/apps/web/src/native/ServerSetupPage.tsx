@@ -33,8 +33,8 @@ export function ServerSetupPage({
         <p className="eyebrow">ANDROID 首次设置</p>
         <h1>连接你的 LastDone 服务器</h1>
         <p className="login-intro">
-          APK 只保存服务器地址，事项仍会同步到你自己的 VPS。请填写已经配置好
-          HTTPS 的域名。
+          APK 只保存服务器地址，事项仍会同步到你自己的 VPS。请填写已经配置好 HTTPS
+          的域名。
         </p>
         <form onSubmit={submit}>
           <label className="field">
@@ -71,3 +71,26 @@ export function ServerSetupPage({
   );
 }
 
+export function StartupErrorPage({ message }: { message: string }) {
+  return (
+    <main className="server-setup-page">
+      <section className="server-setup-card">
+        <div className="brand-mark" aria-hidden="true">
+          !
+        </div>
+        <p className="eyebrow">LASTDONE 启动失败</p>
+        <h1>无法读取应用配置</h1>
+        <p className="notice notice-error" role="alert">
+          {message}
+        </p>
+        <button
+          className="button button-primary login-submit"
+          type="button"
+          onClick={() => window.location.reload()}
+        >
+          重新加载
+        </button>
+      </section>
+    </main>
+  );
+}

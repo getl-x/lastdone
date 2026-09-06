@@ -453,21 +453,17 @@ PocketBase 提供 SQLite 持久化、身份验证、记录管理、迁移和管�
 计划采用以下仓库结构：
 
     lastdone/
-    ├── apps/
-    │   ├── web/
-    │   └── android/
-    ├── server/
-    │   ├── main.go
-    │   ├── sync/
-    │   ├── notifications/
-    │   └── migrations/
-    ├── packages/
-    │   ├── core/
-    │   └── contracts/
+    ├── source/
+    │   ├── apps/web/
+    │   │   └── android/
+    │   ├── server/
+    │   └── packages/
     ├── deploy/
-    │   ├── compose.yaml
-    │   ├── .env.example
-    │   └── openresty.conf
+    │   └── lastdone.env.example
+    ├── docs/
+    │   ├── en/
+    │   └── zh-CN/
+    ├── compose.yml
     ├── Dockerfile
     └── .github/workflows/
 
@@ -500,14 +496,14 @@ root 用户运行并开放 8090 端口。
         ports:
           - "127.0.0.1:8090:8090"
         volumes:
-          - /opt/lastdone/data:/pb/pb_data
+          - lastdone_data:/pb/pb_data
         env_file:
           - .env
         environment:
           TZ: Asia/Shanghai
           GOMEMLIMIT: 384MiB
         healthcheck:
-          test: ["CMD", "/app/lastdone", "healthcheck"]
+          test: ["CMD", "/usr/local/bin/lastdone", "healthcheck"]
           interval: 30s
           timeout: 5s
           retries: 3
@@ -533,25 +529,14 @@ root 用户运行并开放 8090 端口。
     127.0.0.1:8090 / LastDone 容器
        |
        v
-    /opt/lastdone/data
+    持久化命名卷中的 /pb/pb_data
 
 容器端口永远不绑定到公网接口。
 
-随项目提供的 OpenResty 示例配置会：
-
-- 转发真实客户端 IP、Host 和 HTTPS 协议；
-- 对 PocketBase 实时事件流关闭代理缓冲并延长读取超时；
-- 禁止缓存 API 和身份验证响应；
-- 对 Service Worker 进行重新验证；
-- 允许不可变、带哈希静态资源长期缓存；
-- 阻止公网访问 PocketBase 管理界面。
-
-管理员通过 SSH 隧道访问 `127.0.0.1:8090`。管理员使用安全的部署命令或
-通过隧道进入管理初始化页面，创建首个 PocketBase 超级管理员，然后创建
-唯一的 LastDone 应用用户。管理员密码不得保存在 Compose 或应用环境变量中。
-
-Cloudflare、OpenResty 和 PocketBase 的限速共同保护公网登录接口。
-PocketBase 设置使用随机运行时密钥加密。
+仓库有意不安装或管理 OpenResty 配置。所有者在现有 1Panel 网站中把代理目标
+设置为 `127.0.0.1:8090`，并在 1Panel 和 Cloudflare 界面中自行管理 HTTPS、
+Cloudflare 策略及 PocketBase 管理路径的访问方式。管理员密码不得保存在
+Compose 或应用环境变量中。
 
 ## 13. 持续集成与发布
 
@@ -669,7 +654,7 @@ Android 设备。
 ### 阶段 3：生产分发
 
 - 加固后的 Docker 镜像；
-- Compose 和 OpenResty 示例；
+- Compose 和中英文 1Panel 部署文档；
 - 自动备份和升级路径；
 - GitHub Actions；
 - Docker Hub 多架构发布；
@@ -697,7 +682,7 @@ Android 设备。
 - `amd64` 和 `arm64` 镜像已经发布到 Docker Hub；
 - GitHub Release 已附带签名 APK；
 - 升级会在迁移前创建可恢复备份；
-- 公网反向代理无法访问 PocketBase 管理界面；
+- 容器只绑定回环地址并位于所有者管理的 1Panel 反向代理之后；
 - 完整 JSON 导出能够恢复全部应用数据。
 
 ## 19. 明确延后的功能

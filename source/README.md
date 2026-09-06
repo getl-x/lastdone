@@ -18,3 +18,14 @@ npm run typecheck
 npm run lint
 npm run build
 ```
+
+The Android project is located at `apps/web/android`. Its shared web bundle is created
+without a PWA service worker and copied with:
+
+```bash
+npm run android:sync --workspace @lastdone/web
+```
+
+Do not commit copied Android web assets, Gradle output, PocketBase runtime data,
+environment files, or signing keys. See the bilingual documentation in the
+repository-level `docs` directory for deployment and release procedures.

@@ -1,0 +1,119 @@
+name: Publish Android APK
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: GitHub release tag, for example v0.1.0
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      VITE_LASTDONE_SERVER_URL: ${{ vars.LASTDONE_SERVER_URL }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      LASTDONE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      LASTDONE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      LASTDONE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      LASTDONE_KEYSTORE_PATH: ${{ github.workspace }}/.release/lastdone-release.jks
+      LASTDONE_VERSION_CODE: ${{ github.run_number }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Validate release secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 LASTDONE_KEYSTORE_PASSWORD LASTDONE_KEY_ALIAS LASTDONE_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required secret: ${name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Install JavaScript dependencies
+        working-directory: source
+        run: npm ci
+
+      - name: Decode signing keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$LASTDONE_KEYSTORE_PATH")"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$LASTDONE_KEYSTORE_PATH"
+          chmod 600 "$LASTDONE_KEYSTORE_PATH"
+
+      - name: Set release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          if [ -z "$version" ] || [ "$version" = "$RELEASE_TAG" ]; then
+            echo "Release tag must start with v" >&2
+            exit 1
+          fi
+          echo "LASTDONE_VERSION_NAME=$version" >> "$GITHUB_ENV"
+          echo "VITE_LASTDONE_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Build web bundle and sync Capacitor
+        working-directory: source
+        run: npm run android:sync --workspace @lastdone/web
+
+      - name: Assemble signed release APK
+        working-directory: source/apps/web/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Prepare release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          apk="release/lastdone-${LASTDONE_VERSION_NAME}-android.apk"
+          cp source/apps/web/android/app/build/outputs/apk/release/app-release.apk "$apk"
+          sha256sum "$apk" > "${apk}.sha256"
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --generate-notes --title "LastDone $RELEASE_TAG"
+          fi
+          gh release upload "$RELEASE_TAG" release/* --clobber
+
+      - name: Remove signing material
+        if: always()
+        shell: bash
+        run: rm -f "$LASTDONE_KEYSTORE_PATH"

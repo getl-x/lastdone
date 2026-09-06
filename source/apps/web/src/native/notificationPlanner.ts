@@ -18,6 +18,7 @@ export interface PlannedAndroidNotification {
   route: string;
   kind: AndroidNotificationKind;
   at: Date;
+  catchUp: boolean;
 }
 
 export interface AndroidNotificationPlanInput {
@@ -39,7 +40,7 @@ interface ClockParts {
   minute: number;
 }
 
-interface PendingPlan extends Omit<PlannedAndroidNotification, "id"> {}
+type PendingPlan = Omit<PlannedAndroidNotification, "id">;
 
 function parseLocalDate(value: string): LocalDateParts | null {
   const match = DATE_PATTERN.exec(value);
@@ -113,7 +114,13 @@ function zonedDateTime(localDate: string, clock: ClockParts, timeZone: string): 
   const date = parseLocalDate(localDate);
   if (!date) throw new Error(`invalid local date: ${localDate}`);
 
-  const target = Date.UTC(date.year, date.month - 1, date.day, clock.hour, clock.minute);
+  const target = Date.UTC(
+    date.year,
+    date.month - 1,
+    date.day,
+    clock.hour,
+    clock.minute,
+  );
   let guess = target;
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const actual = localPartsAt(new Date(guess), timeZone);
@@ -162,7 +169,7 @@ function deliveryTime(
   localDate: string,
   nominal: ClockParts,
   settings: UserSettingsRecord,
-): Date | null {
+): { at: Date; catchUp: boolean } | null {
   const delayed = delayForQuietHours(
     localDate,
     nominal,
@@ -170,9 +177,9 @@ function deliveryTime(
     parseClock(settings.quietHoursEnd),
   );
   const planned = zonedDateTime(delayed.localDate, delayed.clock, settings.timeZone);
-  if (planned.getTime() > now.getTime()) return planned;
+  if (planned.getTime() > now.getTime()) return { at: planned, catchUp: false };
   if (now.getTime() - planned.getTime() > MAX_CATCH_UP_MS) return null;
-  return new Date(now.getTime() + CATCH_UP_DELAY_MS);
+  return { at: new Date(now.getTime() + CATCH_UP_DELAY_MS), catchUp: true };
 }
 
 function attentionForDate(
@@ -278,8 +285,13 @@ export function planAndroidNotifications(
         input.settings.dueSoonDays,
       );
       if (view.attention.length === 0) continue;
-      const at = deliveryTime(input.now, logicalDate, digestClock, input.settings);
-      if (!at || at >= horizonEnd) continue;
+      const delivery = deliveryTime(
+        input.now,
+        logicalDate,
+        digestClock,
+        input.settings,
+      );
+      if (!delivery || delivery.at >= horizonEnd) continue;
       entries.push({
         identity: `digest:${logicalDate}`,
         title: "LastDone 每日摘要",
@@ -291,7 +303,7 @@ export function planAndroidNotifications(
         ),
         route: "/?filter=attention",
         kind: "digest",
-        at,
+        ...delivery,
       });
     }
   }
@@ -312,15 +324,20 @@ export function planAndroidNotifications(
         if (!Number.isInteger(offset) || offset < 0 || seen.has(offset)) continue;
         seen.add(offset);
         const logicalDate = addLocalDays(item.dueDate, -offset);
-        const at = deliveryTime(input.now, logicalDate, digestClock, input.settings);
-        if (!at || at >= horizonEnd) continue;
+        const delivery = deliveryTime(
+          input.now,
+          logicalDate,
+          digestClock,
+          input.settings,
+        );
+        if (!delivery || delivery.at >= horizonEnd) continue;
         entries.push({
           identity: `item:${item.id}:due:${item.dueDate}:important:${offset}`,
           title: item.name,
           body: reminderBody(offset, item.dueDate),
           route: `/items/${item.id}`,
           kind: "important",
-          at,
+          ...delivery,
         });
       }
     }
@@ -328,4 +345,3 @@ export function planAndroidNotifications(
 
   return assignStableIds(entries);
 }
-

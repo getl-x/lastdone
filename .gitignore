@@ -19,6 +19,9 @@
 /source/**/.vite/
 /source/**/.gradle/
 /source/**/build/
+/source/apps/web/android/app/src/main/assets/public/
+/source/apps/web/android/capacitor-cordova-android-plugins/
+/source/apps/web/android/local.properties
 /source/server/pb_data/
 /source/server/pb_public/
 /source/**/.env
@@ -50,9 +53,21 @@
 !/deploy/
 !/deploy/**
 
-# Only the Docker publishing workflow is tracked under .github.
+# Approved publishing workflows are tracked under .github.
 !/.github/
 /.github/*
 !/.github/workflows/
 /.github/workflows/*
 !/.github/workflows/docker-publish.yml
+!/.github/workflows/android-release.yml
+!/.github/workflows/ci.yml
+
+# Bilingual project and operations documentation.
+!/README.md
+!/README.zh-CN.md
+!/docs/
+/docs/*
+!/docs/en/
+!/docs/en/**
+!/docs/zh-CN/
+!/docs/zh-CN/**

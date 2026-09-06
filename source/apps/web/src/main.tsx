@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./app/App";
 import { AppProviders } from "./app/providers";
-import { ServerSetupPage } from "./native/ServerSetupPage";
+import { bootstrapNativeRuntime } from "./native/bootstrap";
+import { ServerSetupPage, StartupErrorPage } from "./native/ServerSetupPage";
 import {
   resolveRuntimeConfig,
   saveAndroidServerOrigin,
@@ -37,10 +38,28 @@ function Root({ initialConfig }: { initialConfig: RuntimeConfig | null }) {
   );
 }
 
-void resolveRuntimeConfig().then((initialConfig) => {
+async function start() {
+  await bootstrapNativeRuntime().catch(() => {
+    // Native listeners will be retried on the next application launch.
+  });
+  let initialConfig: RuntimeConfig | null;
+  try {
+    initialConfig = await resolveRuntimeConfig();
+  } catch (cause) {
+    const message =
+      cause instanceof Error ? cause.message : "请检查应用配置后重新启动。";
+    createRoot(root).render(
+      <StrictMode>
+        <StartupErrorPage message={message} />
+      </StrictMode>,
+    );
+    return;
+  }
   createRoot(root).render(
     <StrictMode>
       <Root initialConfig={initialConfig} />
     </StrictMode>,
   );
-});
+}
+
+void start();

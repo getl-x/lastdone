@@ -4,10 +4,11 @@ import { VitePWA } from "vite-plugin-pwa";
 
 import { manifest, workbox } from "./src/pwa/config.ts";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     VitePWA({
+      disable: mode === "android",
       registerType: "prompt",
       injectRegister: null,
       includeAssets: ["apple-touch-icon.png", "favicon-32x32.png"],
@@ -21,4 +22,4 @@ export default defineConfig({
     css: true,
     exclude: [...configDefaults.exclude, "e2e/**"],
   },
-});
+}));

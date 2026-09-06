@@ -43,6 +43,10 @@ describe("notification client", () => {
       digestEnabled: false,
       importantRemindersEnabled: false,
     });
+    expect(notificationDefaults("android")).toEqual({
+      digestEnabled: false,
+      importantRemindersEnabled: true,
+    });
   });
 
   it("requests permission only when enabling and registers the subscription", async () => {

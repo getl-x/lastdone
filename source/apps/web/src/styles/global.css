@@ -74,6 +74,34 @@ a {
   place-items: center;
 }
 
+.server-setup-page {
+  display: grid;
+  min-height: 100vh;
+  padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem
+    max(1.25rem, env(safe-area-inset-bottom));
+  place-items: center;
+}
+
+.server-setup-card {
+  width: min(100%, 520px);
+  padding: clamp(1.5rem, 5vw, 2.5rem);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-large);
+  background: color-mix(in srgb, var(--color-surface-raised) 94%, transparent);
+  box-shadow: var(--shadow-soft);
+}
+
+.server-setup-card .brand-mark {
+  margin-bottom: 1.5rem;
+}
+
+.server-setup-card h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 5vw, 2.45rem);
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+}
+
 .login-card {
   width: min(100%, 440px);
   padding: clamp(1.5rem, 5vw, 2.5rem);
@@ -217,6 +245,16 @@ a {
   color: var(--color-accent-strong);
 }
 
+.android-notification-help {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.server-origin-value {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
 .connectivity-banner {
   position: sticky;
   z-index: 15;
@@ -358,6 +396,30 @@ a {
   border-radius: var(--radius-small);
   background: var(--color-surface-raised);
   color: var(--color-text);
+}
+
+.active-filter-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: -0.8rem 0 1.5rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius-small);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.active-filter-notice button {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-weight: 800;
 }
 
 .item-group {

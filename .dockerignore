@@ -55,6 +55,8 @@ source/apps/web/dist/
 source/apps/web/dist/**
 source/apps/web/test-results/
 source/apps/web/test-results/**
+source/apps/web/android/
+source/apps/web/android/**
 source/packages/*/node_modules/
 source/packages/*/node_modules/**
 source/packages/*/dist/

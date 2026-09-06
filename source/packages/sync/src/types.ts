@@ -49,4 +49,5 @@ export interface SyncEngineOptions {
   transport: SyncTransport;
   clock?: () => string;
   foregroundIntervalMs?: number;
+  onCompleted?(result: SyncResult): void;
 }

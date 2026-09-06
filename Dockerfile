@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1.7
 
+ARG VERSION=dev
+
 FROM node:22-bookworm-slim AS web-build
+
+ARG VERSION
+ENV VITE_LASTDONE_VERSION=${VERSION}
 
 WORKDIR /build/source
 

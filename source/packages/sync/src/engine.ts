@@ -116,6 +116,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
         combined.pulled += result.pulled;
         combined.conflicts += result.conflicts;
       } while (rerunRequested);
+      options.onCompleted?.(combined);
       return combined;
     })().finally(() => {
       activeRun = undefined;

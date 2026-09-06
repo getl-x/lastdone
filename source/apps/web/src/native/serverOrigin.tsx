@@ -1,6 +1,11 @@
 import { Preferences } from "@capacitor/preferences";
 import { createContext, useContext, type PropsWithChildren } from "react";
 
+import {
+  clearAndroidNotificationLedger,
+  setAndroidNotificationsEnabled,
+} from "./androidNotificationStore";
+import { clearAndroidNotifications } from "./androidNotificationScheduler";
 import { isAndroidNative } from "./platform";
 
 const SERVER_ORIGIN_KEY = "lastdone_server_origin";
@@ -90,6 +95,7 @@ export async function resolveRuntimeConfig(): Promise<RuntimeConfig | null> {
 
 export async function saveAndroidServerOrigin(value: string): Promise<RuntimeConfig> {
   const serverOrigin = normalizeServerOrigin(value);
+  await verifyLastDoneServer(serverOrigin);
   await Preferences.set({ key: SERVER_ORIGIN_KEY, value: serverOrigin });
   return {
     isAndroid: true,
@@ -99,7 +105,40 @@ export async function saveAndroidServerOrigin(value: string): Promise<RuntimeCon
 }
 
 export async function resetAndroidServerOrigin(): Promise<void> {
+  await clearAndroidNotifications();
+  await clearAndroidNotificationLedger();
+  await setAndroidNotificationsEnabled(false);
   await Preferences.remove({ key: SERVER_ORIGIN_KEY });
   localStorage.removeItem("pocketbase_auth");
 }
 
+export async function verifyLastDoneServer(
+  serverOrigin: string,
+  request: typeof globalThis.fetch = globalThis.fetch.bind(globalThis),
+): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  let response: Response;
+  try {
+    response = await request(`${serverOrigin}/api/lastdone/health`, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+  } catch {
+    throw new Error("无法连接服务器，请检查域名、HTTPS 证书和网络连接。");
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!response.ok) {
+    throw new Error(`服务器健康检查失败（HTTP ${response.status}）。`);
+  }
+  let payload: { status?: unknown };
+  try {
+    payload = (await response.json()) as { status?: unknown };
+  } catch {
+    throw new Error("服务器返回了无法识别的健康检查结果。");
+  }
+  if (payload.status !== "ok") {
+    throw new Error("这个地址不是可用的 LastDone 服务器。");
+  }
+}

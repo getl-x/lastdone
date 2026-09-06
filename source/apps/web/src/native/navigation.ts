@@ -44,4 +44,3 @@ export function subscribeToNativeNavigation(
 
   return () => window.removeEventListener(NAVIGATE_EVENT, handle);
 }
-

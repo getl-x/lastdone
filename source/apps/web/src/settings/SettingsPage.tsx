@@ -19,11 +19,14 @@ import type {
 
 import { useAuth } from "../auth/AuthProvider";
 import { useData } from "../data/DataProvider";
+import { resetAndroidServerOrigin, useRuntimeConfig } from "../native/serverOrigin";
 import type {
   NotificationDeviceState,
+  NotificationPlatform,
   NotificationPreferences,
 } from "../notifications/client";
 import { useNotifications } from "../notifications/NotificationProvider";
+import { VersionInfo } from "./VersionInfo";
 
 export interface LastDoneExport {
   format: "lastdone-export";
@@ -80,6 +83,7 @@ export function SettingsPage() {
   const { db, repositories, userId } = useData();
   const { changePassword } = useAuth();
   const notifications = useNotifications();
+  const runtimeConfig = useRuntimeConfig();
   const settings = useLiveQuery(() => db.settings.get(userId), [db, userId]);
   const devices = useLiveQuery(
     () => db.devices.where("userId").equals(userId).toArray(),
@@ -97,7 +101,10 @@ export function SettingsPage() {
   const [changingPassword, setChangingPassword] = useState(false);
   const [notificationState, setNotificationState] = useState<
     | NotificationDeviceState
-    | { status: "unsupported" | "denied" | "disabled"; platform: "web" | "ios-pwa" }
+    | {
+        status: "unsupported" | "denied" | "disabled";
+        platform: NotificationPlatform;
+      }
     | null
   >(null);
   const [notificationDevices, setNotificationDevices] = useState<
@@ -156,7 +163,10 @@ export function SettingsPage() {
       })
       .catch(() => {
         if (active) {
-          setNotificationState({ status: "disabled", platform: "web" });
+          setNotificationState({
+            status: "disabled",
+            platform: runtimeConfig.isAndroid ? "android" : "web",
+          });
           setNotificationError("暂时无法读取这台设备的通知状态。");
         }
       });
@@ -164,7 +174,7 @@ export function SettingsPage() {
     return () => {
       active = false;
     };
-  }, [notifications, refreshNotificationDevices]);
+  }, [notifications, refreshNotificationDevices, runtimeConfig.isAndroid]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -305,6 +315,18 @@ export function SettingsPage() {
     }
   }
 
+  async function resetServer() {
+    if (
+      !window.confirm(
+        "重新配置服务器会退出当前账号。设备中的离线数据不会自动删除，确定继续吗？",
+      )
+    ) {
+      return;
+    }
+    await resetAndroidServerOrigin();
+    window.location.reload();
+  }
+
   if (settings === undefined) {
     return <p className="loading-state">正在读取设置…</p>;
   }
@@ -410,7 +432,8 @@ export function SettingsPage() {
             <>
               <p className="sync-status">
                 <span className="status-dot" />
-                这台设备已启用 Web Push
+                这台设备已启用
+                {notificationState.platform === "android" ? "本地通知" : "Web Push"}
               </p>
               <div className="notification-preferences">
                 <label>
@@ -455,6 +478,18 @@ export function SettingsPage() {
               {notificationError}
             </p>
           ) : null}
+          {notificationState?.platform === "android" ? (
+            <div className="notice notice-info android-notification-help">
+              <strong>红米 / HyperOS 建议设置</strong>
+              <span>
+                在系统设置中允许 LastDone
+                通知，并把电池策略设为“不限制”。如果重启后不提醒，再允许自启动。
+              </span>
+              <span>
+                LastDone 使用非精确本地提醒，不需要 Google 服务或精确闹钟权限。
+              </span>
+            </div>
+          ) : null}
           {notificationDevices.length > 0 ? (
             <>
               <h3>已登记设备</h3>
@@ -484,6 +519,31 @@ export function SettingsPage() {
           </p>
           <p className="muted">离线时可以继续使用，恢复网络后会自动重试。</p>
         </section>
+
+        {runtimeConfig.isAndroid ? (
+          <section className="surface-card">
+            <h2>服务器</h2>
+            <p className="server-origin-value">{runtimeConfig.serverOrigin}</p>
+            {runtimeConfig.serverOriginSource === "preferences" ? (
+              <>
+                <p className="muted">
+                  服务器地址保存在这台手机中。重新配置会退出账号，但不会立即删除离线数据库。
+                </p>
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  onClick={() => void resetServer()}
+                >
+                  重新配置服务器
+                </button>
+              </>
+            ) : (
+              <p className="muted">
+                此地址在 APK 构建时固定。如需更改，请使用新的服务器地址重新生成 APK。
+              </p>
+            )}
+          </section>
+        ) : null}
 
         <section className="surface-card">
           <h2>数据导出与恢复</h2>
@@ -576,9 +636,7 @@ export function SettingsPage() {
         </section>
       </div>
 
-      <footer className="version-info">
-        LastDone Web · Server version available after sync
-      </footer>
+      <VersionInfo />
     </div>
   );
 }

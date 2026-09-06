@@ -1,4 +1,5 @@
-export type NotificationPlatform = "web" | "ios-pwa";
+export type NotificationPlatform = "web" | "ios-pwa" | "android";
+export type WebPushPlatform = Exclude<NotificationPlatform, "android">;
 export type NotificationStatus = "unsupported" | "denied" | "disabled" | "enabled";
 
 export interface NotificationPreferences {
@@ -9,7 +10,7 @@ export interface NotificationPreferences {
 export interface NotificationDeviceState extends NotificationPreferences {
   deviceId: string;
   deviceName: string;
-  platform: NotificationPlatform | "android";
+  platform: NotificationPlatform;
   enabled: boolean;
   status: NotificationStatus;
 }
@@ -26,7 +27,7 @@ export interface PushSubscriptionLike {
 
 export interface PushRuntime {
   supported: boolean;
-  platform: NotificationPlatform;
+  platform: WebPushPlatform;
   deviceName: string;
   permission(): NotificationPermission;
   requestPermission(): Promise<NotificationPermission>;
@@ -40,7 +41,10 @@ export interface PushRuntime {
 export interface NotificationClient {
   inspect(): Promise<
     | NotificationDeviceState
-    | { status: Exclude<NotificationStatus, "enabled">; platform: NotificationPlatform }
+    | {
+        status: Exclude<NotificationStatus, "enabled">;
+        platform: NotificationPlatform;
+      }
   >;
   enable(
     preferences?: NotificationPreferences,
@@ -70,7 +74,7 @@ interface BrowserNotificationClientOptions {
 interface ServerDeviceState extends NotificationPreferences {
   deviceId: string;
   deviceName: string;
-  platform: NotificationPlatform | "android";
+  platform: NotificationPlatform;
   enabled: boolean;
 }
 
@@ -79,9 +83,13 @@ const DEVICE_ID_KEY = "lastdone_device_id";
 export function notificationDefaults(
   platform: NotificationPlatform,
 ): NotificationPreferences {
-  return platform === "ios-pwa"
-    ? { digestEnabled: true, importantRemindersEnabled: true }
-    : { digestEnabled: false, importantRemindersEnabled: false };
+  if (platform === "ios-pwa") {
+    return { digestEnabled: true, importantRemindersEnabled: true };
+  }
+  if (platform === "android") {
+    return { digestEnabled: false, importantRemindersEnabled: true };
+  }
+  return { digestEnabled: false, importantRemindersEnabled: false };
 }
 
 function isIOS(): boolean {
@@ -102,7 +110,7 @@ export function createBrowserPushRuntime(): PushRuntime {
     "Notification" in window &&
     "serviceWorker" in navigator &&
     "PushManager" in window;
-  const platform: NotificationPlatform =
+  const platform: WebPushPlatform =
     supported && isIOS() && isStandalone() ? "ios-pwa" : "web";
   const registration = () => navigator.serviceWorker.ready;
 

@@ -4,7 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "android:add": "cap add android",
+    "android:build": "npm run build:android && cap sync android && cap build android",
+    "android:open": "cap open android",
+    "android:sync": "npm run build:android && cap sync android",
     "build": "vite build",
+    "build:android": "vite build --mode android",
     "dev": "vite",
     "e2e": "playwright test",
     "preview": "vite preview --host 127.0.0.1",

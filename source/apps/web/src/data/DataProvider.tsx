@@ -14,6 +14,8 @@ import {
 } from "@lastdone/storage";
 import { createSyncEngine, type SyncTransport } from "@lastdone/sync";
 
+import { dispatchSyncCompleted } from "../native/events";
+
 interface DataContextValue {
   db: LastDoneDatabase;
   repositories: Repositories;
@@ -74,6 +76,7 @@ export function DataProvider({
       db: database,
       userId,
       transport: syncTransport,
+      onCompleted: dispatchSyncCompleted,
     });
     const run = () => {
       void engine.run().catch(() => {
