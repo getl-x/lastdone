@@ -72,6 +72,7 @@ export interface Repositories {
     ): Promise<void>;
     move(categoryId: string, direction: -1 | 1): Promise<void>;
     setArchived(categoryId: string, archived: boolean): Promise<void>;
+    remove(categoryId: string, replacementCategoryId?: string): Promise<void>;
   };
   items: {
     create(input: CreateItemInput): Promise<ItemRecord>;
@@ -138,12 +139,12 @@ function generatePocketBaseId(): string {
 }
 
 const DEFAULT_CATEGORIES = [
-  { key: "health", name: "健康", icon: "heart-pulse", color: "#C65D57" },
-  { key: "home", name: "家居", icon: "house", color: "#B57B46" },
-  { key: "digital", name: "数字生活", icon: "cloud", color: "#657FA3" },
-  { key: "devices", name: "设备", icon: "cpu", color: "#6E7F68" },
-  { key: "vehicle", name: "车辆", icon: "car", color: "#8A6E9E" },
-  { key: "other", name: "其他", icon: "shapes", color: "#77736D" },
+  { key: "health", name: "健康", icon: "heart-pulse", color: "#E56B7F" },
+  { key: "home", name: "家居", icon: "house", color: "#D7903D" },
+  { key: "digital", name: "数字生活", icon: "cloud", color: "#4F7FD8" },
+  { key: "devices", name: "设备", icon: "cpu", color: "#2FA89A" },
+  { key: "vehicle", name: "车辆", icon: "car", color: "#8068C9" },
+  { key: "other", name: "其他", icon: "shapes", color: "#747B96" },
 ] as const;
 
 function makeOperation(
@@ -427,6 +428,81 @@ export function createRepositories(
               "update",
               category.revision,
               patch,
+            ),
+          );
+        });
+      },
+      async remove(categoryId, replacementCategoryId) {
+        await db.transaction("rw", db.categories, db.items, db.outbox, async () => {
+          const categories = (
+            await db.categories.where("userId").equals(options.userId).toArray()
+          ).filter((category) => !category.deletedAt);
+          const category = categories.find(({ id }) => id === categoryId);
+          if (!category) {
+            throw new Error(`category not found: ${categoryId}`);
+          }
+          if (categories.length <= 1) {
+            throw new Error("the last category cannot be deleted");
+          }
+
+          const items = (
+            await db.items.where("categoryId").equals(categoryId).toArray()
+          ).filter((item) => item.userId === options.userId && !item.deletedAt);
+          const replacement = replacementCategoryId
+            ? categories.find(({ id }) => id === replacementCategoryId)
+            : undefined;
+          if (replacementCategoryId && !replacement) {
+            throw new Error(`replacement category not found: ${replacementCategoryId}`);
+          }
+          if (replacement?.id === categoryId) {
+            throw new Error("replacement category must be different");
+          }
+          if (items.length > 0 && !replacement) {
+            throw new Error("replacement category is required");
+          }
+
+          const timestamp = now();
+          if (replacement) {
+            for (const item of items) {
+              const itemPatch = {
+                categoryId: replacement.id,
+                revision: item.revision + 1,
+                updatedAt: timestamp,
+              };
+              await db.items.update(item.id, itemPatch);
+              await enqueueOperation(
+                db,
+                makeOperation(
+                  generateOperationId,
+                  options.userId,
+                  timestamp,
+                  "items",
+                  item.id,
+                  "update",
+                  item.revision,
+                  itemPatch,
+                ),
+              );
+            }
+          }
+
+          const categoryPatch = {
+            deletedAt: timestamp,
+            revision: category.revision + 1,
+            updatedAt: timestamp,
+          };
+          await db.categories.update(category.id, categoryPatch);
+          await enqueueOperation(
+            db,
+            makeOperation(
+              generateOperationId,
+              options.userId,
+              timestamp,
+              "categories",
+              category.id,
+              "delete",
+              category.revision,
+              categoryPatch,
             ),
           );
         });

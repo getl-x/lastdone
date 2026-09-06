@@ -30,7 +30,7 @@ export function ItemCard({
       <Link className="item-card-main" to={`/items/${item.id}`}>
         <span
           className="category-dot"
-          style={{ backgroundColor: category?.color ?? "#77736D" }}
+          style={{ backgroundColor: category?.color ?? "#747B96" }}
           aria-hidden="true"
         >
           {CATEGORY_SYMBOLS[category?.icon ?? ""] ?? "●"}

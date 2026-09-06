@@ -23,8 +23,23 @@ body {
   min-height: 100dvh;
   margin: 0;
   background:
-    radial-gradient(circle at 92% 0%, rgb(69 145 117 / 12%), transparent 26rem),
+    radial-gradient(
+      circle at 92% -4%,
+      color-mix(in srgb, var(--color-accent) 17%, transparent),
+      transparent 27rem
+    ),
+    radial-gradient(
+      circle at -8% 38%,
+      color-mix(in srgb, var(--color-secondary) 11%, transparent),
+      transparent 25rem
+    ),
+    radial-gradient(
+      circle at 86% 92%,
+      color-mix(in srgb, var(--color-highlight) 9%, transparent),
+      transparent 24rem
+    ),
     var(--color-canvas);
+  background-attachment: fixed;
 }
 
 button,
@@ -53,7 +68,7 @@ a {
 
 .eyebrow {
   margin: 0 0 0.45rem;
-  color: var(--color-accent);
+  color: var(--color-accent-strong);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -65,10 +80,12 @@ a {
   height: 56px;
   place-items: center;
   border-radius: 18px;
-  background: var(--color-accent);
+  background: linear-gradient(145deg, var(--color-accent), var(--color-info));
   color: white;
   font-size: 1.75rem;
-  box-shadow: var(--shadow-soft);
+  box-shadow:
+    0 12px 26px color-mix(in srgb, var(--color-accent) 28%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 24%);
 }
 
 .brand-mark-small {
@@ -219,13 +236,13 @@ a {
 }
 
 .button-primary {
-  background: var(--color-accent);
+  background: linear-gradient(135deg, var(--color-accent), var(--color-info));
   color: var(--color-accent-contrast);
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--color-accent) 20%, transparent);
+  box-shadow: 0 9px 20px color-mix(in srgb, var(--color-accent) 24%, transparent);
 }
 
 .button-primary:hover:not(:disabled) {
-  background: var(--color-accent-strong);
+  background: linear-gradient(135deg, var(--color-accent-strong), var(--color-info));
 }
 
 .button-secondary {
@@ -285,8 +302,8 @@ a {
 }
 
 .notice-info {
-  background: var(--color-accent-soft);
-  color: var(--color-accent-strong);
+  background: var(--color-info-soft);
+  color: var(--color-info);
 }
 
 .android-notification-help {
@@ -405,28 +422,45 @@ a {
 .status-summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0;
+  gap: 0.65rem;
   margin-bottom: 1.35rem;
-  padding: 0.35rem;
-  border: 1px solid var(--color-border);
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--color-surface-raised) 94%, transparent);
-  box-shadow: var(--shadow-card);
 }
 
 .summary-card {
   display: grid;
   min-width: 0;
   gap: 0.3rem;
-  padding: 0.85rem 0.8rem;
-  border: 0;
-  border-radius: 15px;
-  background: transparent;
+  padding: 0.95rem;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-card);
 }
 
-.summary-card + .summary-card {
-  border-left: 1px solid var(--color-border);
-  border-radius: 0;
+.summary-overdue {
+  border-color: color-mix(in srgb, var(--color-danger) 22%, var(--color-border));
+  background: linear-gradient(
+    145deg,
+    var(--color-highlight-soft),
+    color-mix(in srgb, var(--color-surface-raised) 88%, transparent)
+  );
+}
+
+.summary-due-today {
+  border-color: color-mix(in srgb, var(--color-warning) 22%, var(--color-border));
+  background: linear-gradient(
+    145deg,
+    var(--color-warning-soft),
+    color-mix(in srgb, var(--color-surface-raised) 88%, transparent)
+  );
+}
+
+.summary-due-soon {
+  border-color: color-mix(in srgb, var(--color-info) 22%, var(--color-border));
+  background: linear-gradient(
+    145deg,
+    var(--color-info-soft),
+    color-mix(in srgb, var(--color-surface-raised) 88%, transparent)
+  );
 }
 
 .summary-card strong {
@@ -451,7 +485,7 @@ a {
 }
 
 .summary-due-soon strong {
-  color: var(--color-accent-strong);
+  color: var(--color-info);
 }
 
 .dashboard-toolbar {
@@ -523,6 +557,18 @@ a {
   border-radius: var(--radius-medium);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-card);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+@media (hover: hover) {
+  .item-card:hover {
+    transform: translateY(-1px);
+    border-color: var(--color-border-strong);
+    box-shadow: 0 13px 30px color-mix(in srgb, var(--color-accent) 10%, transparent);
+  }
 }
 
 .item-card.is-important {
@@ -578,9 +624,9 @@ a {
 }
 
 .button-complete {
-  border: 1px solid var(--color-accent);
-  background: var(--color-accent-soft);
-  color: var(--color-accent-strong);
+  border: 1px solid color-mix(in srgb, var(--color-secondary) 38%, var(--color-border));
+  background: var(--color-secondary-soft);
+  color: var(--color-secondary);
 }
 
 .empty-state,
@@ -600,7 +646,7 @@ a {
   margin: 0 auto 1rem;
   place-items: center;
   border-radius: 16px;
-  background: var(--color-accent-soft);
+  background: linear-gradient(145deg, var(--color-accent-soft), var(--color-info-soft));
   color: var(--color-accent-strong);
   content: "✓";
   font-size: 1.35rem;
@@ -657,6 +703,35 @@ a {
   border-radius: 20px;
   background: color-mix(in srgb, var(--color-surface-raised) 96%, transparent);
   box-shadow: var(--shadow-card);
+}
+
+.category-create-card {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--color-surface-raised), var(--color-surface-raised))
+      padding-box,
+    linear-gradient(
+        120deg,
+        color-mix(in srgb, var(--color-accent) 58%, transparent),
+        color-mix(in srgb, var(--color-secondary) 48%, transparent),
+        color-mix(in srgb, var(--color-highlight) 42%, transparent)
+      )
+      border-box;
+}
+
+.surface-card > h2::before,
+.danger-zone > h2::before {
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.9rem;
+  margin-right: 0.48rem;
+  border-radius: 999px;
+  background: linear-gradient(var(--color-accent), var(--color-secondary));
+  content: "";
+}
+
+.danger-zone > h2::before {
+  background: var(--color-danger);
 }
 
 .surface-form {
@@ -980,6 +1055,10 @@ a {
   color: var(--color-accent-strong);
 }
 
+.category-actions .category-delete-button {
+  color: var(--color-danger);
+}
+
 .category-actions .text-button:disabled {
   cursor: default;
   opacity: 0.35;
@@ -993,6 +1072,28 @@ a {
 
 .category-editor .field {
   margin: 0;
+}
+
+.category-delete-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.category-delete-heading h2,
+.category-delete-heading .eyebrow {
+  margin: 0;
+}
+
+.category-delete-heading .eyebrow {
+  margin-bottom: 0.25rem;
+  color: var(--color-danger);
+}
+
+.category-delete-dialog .dialog-description {
+  margin: 1rem 0 0;
+  color: var(--color-muted);
+  line-height: 1.65;
 }
 
 .categories-page,
@@ -1025,7 +1126,7 @@ a {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--color-accent);
+  background: var(--color-success);
 }
 
 .status-dot.pending {
@@ -1033,7 +1134,7 @@ a {
 }
 
 .saved-state {
-  color: var(--color-accent-strong);
+  color: var(--color-success);
   font-weight: 700;
 }
 
@@ -1143,7 +1244,7 @@ a {
 }
 
 .navigation-link.is-active .navigation-icon {
-  background: var(--color-accent-soft);
+  background: linear-gradient(135deg, var(--color-accent-soft), var(--color-info-soft));
 }
 
 @media (min-width: 760px) {
@@ -1160,7 +1261,18 @@ a {
     flex-direction: column;
     padding: 1.25rem;
     border-right: 1px solid var(--color-border);
-    background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+    background:
+      radial-gradient(
+        circle at 15% 0%,
+        color-mix(in srgb, var(--color-accent) 13%, transparent),
+        transparent 15rem
+      ),
+      radial-gradient(
+        circle at 90% 90%,
+        color-mix(in srgb, var(--color-secondary) 9%, transparent),
+        transparent 16rem
+      ),
+      color-mix(in srgb, var(--color-surface) 90%, transparent);
   }
 
   .sidebar-brand {
@@ -1187,7 +1299,11 @@ a {
   }
 
   .desktop-navigation .navigation-link.is-active {
-    background: var(--color-accent-soft);
+    background: linear-gradient(
+      105deg,
+      var(--color-accent-soft),
+      var(--color-info-soft)
+    );
   }
 
   .desktop-navigation .navigation-icon {

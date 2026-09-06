@@ -128,6 +128,69 @@ describe("offline repositories", () => {
     ]);
   });
 
+  it("deletes a category after moving all of its items to another category", async () => {
+    const repositories = createRepositories(db, {
+      userId: USER_ID,
+      now: () => NOW,
+      generateId: sequentialIds(),
+    });
+    await repositories.categories.ensureDefaults();
+    const categories = await db.categories.orderBy("displayOrder").toArray();
+    const source = categories[0]!;
+    const replacement = categories[1]!;
+    const item = await repositories.items.create({
+      name: "年度体检",
+      categoryId: source.id,
+      schedule: { type: "fixed-yearly", month: 9, day: 5 },
+      initialDueDate: "2027-09-05",
+      important: true,
+      reminderOffsets: [30, 7],
+    });
+    await db.outbox.clear();
+
+    await repositories.categories.remove(source.id, replacement.id);
+
+    expect((await db.categories.get(source.id))?.deletedAt).toBe(NOW);
+    expect(await db.items.get(item.id)).toMatchObject({
+      categoryId: replacement.id,
+      revision: 2,
+    });
+    expect(
+      (await db.outbox.orderBy("createdAt").toArray()).map(
+        ({ entity, action, entityId }) => ({ entity, action, entityId }),
+      ),
+    ).toEqual([
+      { entity: "items", action: "update", entityId: item.id },
+      { entity: "categories", action: "delete", entityId: source.id },
+    ]);
+  });
+
+  it("keeps the final category so items always have a valid destination", async () => {
+    const repositories = createRepositories(db, {
+      userId: USER_ID,
+      now: () => NOW,
+      generateId: sequentialIds(),
+    });
+    await db.categories.add({
+      id: "only-category",
+      userId: USER_ID,
+      revision: 1,
+      createdAt: NOW,
+      updatedAt: NOW,
+      deletedAt: null,
+      name: "唯一分类",
+      icon: "shapes",
+      color: "#5B7FD8",
+      displayOrder: 0,
+      lifecycle: "active",
+    });
+
+    await expect(repositories.categories.remove("only-category")).rejects.toThrow(
+      "the last category cannot be deleted",
+    );
+    expect((await db.categories.get("only-category"))?.deletedAt).toBeNull();
+  });
+
   it("creates an item and its operation in one transaction", async () => {
     const repositories = createRepositories(db, {
       userId: USER_ID,

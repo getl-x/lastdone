@@ -1,6 +1,8 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState, type FormEvent } from "react";
 
+import type { CategoryRecord } from "@lastdone/storage";
+
 import { useData } from "../data/DataProvider";
 
 const CATEGORY_ICONS = [
@@ -14,19 +16,33 @@ const CATEGORY_ICONS = [
 
 export function CategoriesPage() {
   const { db, repositories, userId } = useData();
-  const categories = useLiveQuery(
-    async () =>
-      (
-        await db.categories.where("userId").equals(userId).sortBy("displayOrder")
-      ).filter((category) => !category.deletedAt),
-    [db, userId],
-  );
+  const data = useLiveQuery(async () => {
+    const [categories, items] = await Promise.all([
+      db.categories.where("userId").equals(userId).sortBy("displayOrder"),
+      db.items.where("userId").equals(userId).toArray(),
+    ]);
+    const itemCounts = new Map<string, number>();
+    for (const item of items) {
+      if (!item.deletedAt) {
+        itemCounts.set(item.categoryId, (itemCounts.get(item.categoryId) ?? 0) + 1);
+      }
+    }
+    return {
+      categories: categories.filter((category) => !category.deletedAt),
+      itemCounts,
+    };
+  }, [db, userId]);
+  const categories = data?.categories;
   const [name, setName] = useState("");
-  const [color, setColor] = useState("#657FA3");
+  const [color, setColor] = useState("#5B7FD8");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
-  const [editingColor, setEditingColor] = useState("#657FA3");
+  const [editingColor, setEditingColor] = useState("#5B7FD8");
   const [editingIcon, setEditingIcon] = useState("shapes");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [replacementId, setReplacementId] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,7 +50,7 @@ export function CategoriesPage() {
     setName("");
   }
 
-  function beginEditing(category: NonNullable<typeof categories>[number]) {
+  function beginEditing(category: CategoryRecord) {
     setEditingId(category.id);
     setEditingName(category.name);
     setEditingColor(category.color);
@@ -49,6 +65,44 @@ export function CategoriesPage() {
     });
     setEditingId(null);
   }
+
+  function beginDeleting(category: CategoryRecord) {
+    const replacements = (categories ?? []).filter(({ id }) => id !== category.id);
+    const preferred =
+      replacements.find(({ lifecycle }) => lifecycle === "active") ?? replacements[0];
+    setDeletingId(category.id);
+    setReplacementId(preferred?.id ?? "");
+    setDeleteError("");
+  }
+
+  function cancelDeleting() {
+    setDeletingId(null);
+    setDeleteError("");
+  }
+
+  async function confirmDeleting() {
+    if (!deletingId) return;
+    const itemCount = data?.itemCounts.get(deletingId) ?? 0;
+    setIsDeleting(true);
+    setDeleteError("");
+    try {
+      await repositories.categories.remove(
+        deletingId,
+        itemCount > 0 ? replacementId : undefined,
+      );
+      setDeletingId(null);
+    } catch {
+      setDeleteError("删除失败，请确认已选择接收事项的分类后重试。");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  const deletingCategory = categories?.find(({ id }) => id === deletingId);
+  const deletingItemCount = deletingId ? (data?.itemCounts.get(deletingId) ?? 0) : 0;
+  const replacementCategories = (categories ?? []).filter(
+    ({ id }) => id !== deletingId,
+  );
 
   return (
     <div className="categories-page">
@@ -135,6 +189,7 @@ export function CategoriesPage() {
                   <strong>{category.name}</strong>
                   <small>
                     {category.lifecycle === "archived" ? "已归档" : `排序 ${index + 1}`}
+                    {` · ${data?.itemCounts.get(category.id) ?? 0} 个事项`}
                   </small>
                 </div>
               )}
@@ -196,11 +251,93 @@ export function CategoriesPage() {
                 >
                   {category.lifecycle === "archived" ? "恢复" : "归档"}
                 </button>
+                <button
+                  className="text-button category-delete-button"
+                  type="button"
+                  aria-label={`删除分类 ${category.name}`}
+                  title={
+                    (categories?.length ?? 0) <= 1 ? "至少需要保留一个分类" : undefined
+                  }
+                  disabled={editingId === category.id || (categories?.length ?? 0) <= 1}
+                  onClick={() => beginDeleting(category)}
+                >
+                  删除
+                </button>
               </div>
             </li>
           ))}
         </ul>
       </section>
+
+      {deletingCategory ? (
+        <div className="dialog-backdrop" role="presentation">
+          <section
+            className="dialog-card category-delete-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-category-title"
+          >
+            <div className="category-delete-heading">
+              <span
+                className="category-swatch"
+                style={{ background: deletingCategory.color }}
+                aria-hidden="true"
+              />
+              <div>
+                <p className="eyebrow">删除分类</p>
+                <h2 id="delete-category-title">删除“{deletingCategory.name}”？</h2>
+              </div>
+            </div>
+
+            {deletingItemCount > 0 ? (
+              <>
+                <p className="dialog-description">
+                  此分类中有 {deletingItemCount}{" "}
+                  个事项（包括暂停或归档事项）。删除分类前， 请为它们选择新的归属。
+                </p>
+                <label className="field">
+                  <span>事项移动到</span>
+                  <select
+                    value={replacementId}
+                    onChange={(event) => setReplacementId(event.target.value)}
+                  >
+                    {replacementCategories.map((category) => (
+                      <option value={category.id} key={category.id}>
+                        {category.name}
+                        {category.lifecycle === "archived" ? "（已归档）" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : (
+              <p className="dialog-description">
+                此分类中没有事项。删除后，它会在同步完成后从所有设备移除。
+              </p>
+            )}
+
+            {deleteError ? <p className="notice notice-error">{deleteError}</p> : null}
+            <div className="dialog-actions">
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={isDeleting}
+                onClick={cancelDeleting}
+              >
+                取消
+              </button>
+              <button
+                className="button button-danger"
+                type="button"
+                disabled={isDeleting || (deletingItemCount > 0 && !replacementId)}
+                onClick={() => void confirmDeleting()}
+              >
+                {isDeleting ? "正在删除…" : "确认删除"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
