@@ -25,21 +25,22 @@ body {
   background:
     radial-gradient(
       circle at 92% -4%,
-      color-mix(in srgb, var(--color-accent) 17%, transparent),
+      color-mix(in srgb, var(--color-accent) 30%, transparent),
       transparent 27rem
     ),
     radial-gradient(
       circle at -8% 38%,
-      color-mix(in srgb, var(--color-secondary) 11%, transparent),
+      color-mix(in srgb, var(--color-secondary) 18%, transparent),
       transparent 25rem
     ),
     radial-gradient(
       circle at 86% 92%,
-      color-mix(in srgb, var(--color-highlight) 9%, transparent),
+      color-mix(in srgb, var(--color-highlight) 22%, transparent),
       transparent 24rem
     ),
     var(--color-canvas);
   background-attachment: fixed;
+  accent-color: var(--color-accent);
 }
 
 button,
@@ -167,6 +168,8 @@ a {
 
 .field {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 0.5rem;
   margin-top: 0.9rem;
   color: var(--color-text-soft);
@@ -185,12 +188,31 @@ a {
   border: 1px solid var(--color-border);
   border-radius: 14px;
   outline: 0;
-  background: var(--color-surface-subtle);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-subtle) 86%,
+    var(--color-surface-raised)
+  );
   color: var(--color-text);
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
     background 160ms ease;
+}
+
+/* Let our border-box sizing control temporal inputs on iOS as well. */
+.field input:is([type="date"], [type="time"], [type="datetime-local"]) {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.field
+  input:is(
+    [type="date"],
+    [type="time"],
+    [type="datetime-local"]
+  )::-webkit-date-and-time-value {
+  min-width: 0;
 }
 
 .field input:focus,
@@ -213,6 +235,7 @@ a {
 }
 
 .button {
+  text-decoration: none;
   min-height: 46px;
   padding: 0.72rem 1.05rem;
   border: 0;
@@ -236,9 +259,16 @@ a {
 }
 
 .button-primary {
-  background: linear-gradient(135deg, var(--color-accent), var(--color-info));
+  background: linear-gradient(
+    115deg,
+    var(--color-accent),
+    var(--color-button-middle) 52%,
+    var(--color-info)
+  );
   color: var(--color-accent-contrast);
-  box-shadow: 0 9px 20px color-mix(in srgb, var(--color-accent) 24%, transparent);
+  box-shadow:
+    0 8px 24px color-mix(in srgb, var(--color-accent) 32%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 24%);
 }
 
 .button-primary:hover:not(:disabled) {
@@ -395,11 +425,65 @@ a {
 }
 
 .content-header {
+  position: relative;
+  isolation: isolate;
   display: flex;
+  flex-wrap: wrap;
+  padding: clamp(1.1rem, 4vw, 1.75rem);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  border-radius: 26px;
+  background:
+    radial-gradient(
+      ellipse at 100% 0%,
+      color-mix(in srgb, var(--color-highlight) 26%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse at 0% 100%,
+      color-mix(in srgb, var(--color-secondary) 24%, transparent),
+      transparent 65%
+    ),
+    linear-gradient(125deg, var(--color-accent-soft), var(--color-surface-raised));
+  box-shadow: var(--shadow-card);
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.35rem;
+}
+
+.content-header::after {
+  position: absolute;
+  z-index: -1;
+  top: 0.65rem;
+  right: 0.65rem;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 0.65rem color-mix(in srgb, var(--color-accent) 7%, transparent),
+    0 0 0 1.3rem color-mix(in srgb, var(--color-accent) 4%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.content-header .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.28rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 24%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface-raised) 72%, transparent);
+}
+
+.content-header .eyebrow::before {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--color-secondary);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-secondary) 60%, transparent);
+  content: "";
 }
 
 .content-header h1 {
@@ -427,6 +511,8 @@ a {
 }
 
 .summary-card {
+  position: relative;
+  overflow: hidden;
   display: grid;
   min-width: 0;
   gap: 0.3rem;
@@ -436,7 +522,21 @@ a {
   box-shadow: var(--shadow-card);
 }
 
+.summary-card::after {
+  position: absolute;
+  top: -1.25rem;
+  right: -1.25rem;
+  width: 4rem;
+  height: 4rem;
+  border: 10px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.08;
+  content: "";
+  pointer-events: none;
+}
+
 .summary-overdue {
+  color: var(--color-danger);
   border-color: color-mix(in srgb, var(--color-danger) 22%, var(--color-border));
   background: linear-gradient(
     145deg,
@@ -446,6 +546,7 @@ a {
 }
 
 .summary-due-today {
+  color: var(--color-warning);
   border-color: color-mix(in srgb, var(--color-warning) 22%, var(--color-border));
   background: linear-gradient(
     145deg,
@@ -455,6 +556,7 @@ a {
 }
 
 .summary-due-soon {
+  color: var(--color-info);
   border-color: color-mix(in srgb, var(--color-info) 22%, var(--color-border));
   background: linear-gradient(
     145deg,
@@ -555,7 +657,13 @@ a {
   padding: 0.85rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-medium);
-  background: var(--color-surface-raised);
+  background:
+    radial-gradient(
+      ellipse at 100% 0%,
+      color-mix(in srgb, var(--color-secondary) 12%, transparent),
+      transparent 70%
+    ),
+    var(--color-surface-raised);
   box-shadow: var(--shadow-card);
   transition:
     transform 160ms ease,
@@ -697,18 +805,50 @@ a {
 .surface-card,
 .danger-zone,
 .detail-hero {
+  --card-accent: var(--color-accent);
   min-width: 0;
   padding: clamp(1rem, 4vw, 1.5rem);
   border: 1px solid var(--color-border);
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--color-surface-raised) 96%, transparent);
-  box-shadow: var(--shadow-card);
+  border-radius: 24px;
+  border-color: color-mix(in srgb, var(--card-accent) 30%, var(--color-border));
+  background:
+    radial-gradient(
+      ellipse at 100% 0%,
+      color-mix(in srgb, var(--card-accent) 18%, transparent),
+      transparent 65%
+    ),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--card-accent) 5%, var(--color-surface-raised)),
+      var(--color-surface-raised)
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--card-accent) 16%, transparent),
+    var(--shadow-card);
+}
+
+.settings-grid > .surface-card:nth-child(4n + 2),
+.detail-grid > .surface-card:nth-child(2n) {
+  --card-accent: var(--color-secondary);
+}
+
+.settings-grid > .surface-card:nth-child(4n + 3) {
+  --card-accent: var(--color-info);
+}
+
+.settings-grid > .surface-card:nth-child(4n + 4) {
+  --card-accent: var(--color-highlight);
 }
 
 .category-create-card {
   border-color: transparent;
   background:
-    linear-gradient(var(--color-surface-raised), var(--color-surface-raised))
+    linear-gradient(
+        125deg,
+        var(--color-accent-soft),
+        var(--color-surface-raised),
+        var(--color-secondary-soft)
+      )
       padding-box,
     linear-gradient(
         120deg,
@@ -726,7 +866,12 @@ a {
   height: 0.9rem;
   margin-right: 0.48rem;
   border-radius: 999px;
-  background: linear-gradient(var(--color-accent), var(--color-secondary));
+  background: linear-gradient(
+    var(--card-accent, var(--color-accent)),
+    var(--color-secondary)
+  );
+  box-shadow: 0 0 12px
+    color-mix(in srgb, var(--card-accent, var(--color-accent)) 35%, transparent);
   content: "";
 }
 
@@ -1199,8 +1344,14 @@ a {
   grid-template-columns: repeat(3, 1fr);
   padding: 0.4rem max(0.5rem, var(--app-safe-right))
     calc(0.45rem + var(--app-safe-bottom)) max(0.5rem, var(--app-safe-left));
-  border-top: 1px solid var(--color-border);
-  background: color-mix(in srgb, var(--color-surface-raised) 88%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-accent) 32%, var(--color-border));
+  background:
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--color-accent) 10%, transparent),
+      color-mix(in srgb, var(--color-secondary) 8%, transparent)
+    ),
+    color-mix(in srgb, var(--color-surface-raised) 94%, transparent);
   box-shadow: 0 -10px 30px rgb(0 0 0 / 7%);
   backdrop-filter: blur(22px) saturate(1.15);
 }
@@ -1244,7 +1395,14 @@ a {
 }
 
 .navigation-link.is-active .navigation-icon {
-  background: linear-gradient(135deg, var(--color-accent-soft), var(--color-info-soft));
+  background: linear-gradient(
+    115deg,
+    var(--color-accent),
+    var(--color-button-middle),
+    var(--color-info)
+  );
+  color: var(--color-accent-contrast);
+  box-shadow: 0 4px 15px color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 @media (min-width: 760px) {
@@ -1310,6 +1468,8 @@ a {
     width: 24px;
     height: 24px;
     background: transparent;
+    color: inherit;
+    box-shadow: none;
   }
 
   .desktop-navigation .navigation-icon svg {
