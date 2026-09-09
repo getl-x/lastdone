@@ -26,6 +26,7 @@ import {
   restoreJsonExport,
   type LastDoneImportPlan,
 } from "./archive";
+import { UpdateChecker } from "./UpdateChecker";
 import { VersionInfo } from "./VersionInfo";
 
 export { buildJsonExport };
@@ -693,6 +694,8 @@ export function SettingsPage() {
             <p className="muted">当前设备会在首次同步后显示。</p>
           )}
         </section>
+
+        {runtimeConfig.isAndroid ? <UpdateChecker /> : null}
 
         <section className="surface-card">
           <h2>修改密码</h2>

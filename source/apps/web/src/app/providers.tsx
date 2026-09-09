@@ -15,6 +15,7 @@ import { AndroidNotificationClient } from "../native/androidNotificationClient";
 import { AndroidNotificationCoordinator } from "../native/AndroidNotificationCoordinator";
 import { clearAndroidNotifications } from "../native/androidNotificationScheduler";
 import { RuntimeConfigProvider, type RuntimeConfig } from "../native/serverOrigin";
+import { UpdateCheckProvider } from "../native/UpdateCheckProvider";
 import { BrowserNotificationClient } from "../notifications/client";
 import { NotificationProvider } from "../notifications/NotificationProvider";
 
@@ -86,16 +87,18 @@ export function AppProviders({
   );
   return (
     <RuntimeConfigProvider value={runtimeConfig}>
-      <AuthProvider client={authClient}>
-        <NotificationProvider client={notificationClient}>
-          <AuthenticatedData
-            isAndroid={runtimeConfig.isAndroid}
-            syncTransport={syncTransport}
-          >
-            {children}
-          </AuthenticatedData>
-        </NotificationProvider>
-      </AuthProvider>
+      <UpdateCheckProvider isAndroid={runtimeConfig.isAndroid}>
+        <AuthProvider client={authClient}>
+          <NotificationProvider client={notificationClient}>
+            <AuthenticatedData
+              isAndroid={runtimeConfig.isAndroid}
+              syncTransport={syncTransport}
+            >
+              {children}
+            </AuthenticatedData>
+          </NotificationProvider>
+        </AuthProvider>
+      </UpdateCheckProvider>
     </RuntimeConfigProvider>
   );
 }
