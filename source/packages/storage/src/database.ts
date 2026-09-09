@@ -39,5 +39,12 @@ export class LastDoneDatabase extends Dexie {
       syncMeta: "&userId,lastSequence",
       conflicts: "&id,userId,status,createdAt,entity,entityId",
     });
+
+    // v2 adds a userId-leading index so pending-operation queries can resolve
+    // entirely from the index instead of filtering the [status+createdAt] range.
+    this.version(2).stores({
+      outbox:
+        "&id,userId,status,createdAt,[status+createdAt],[userId+status+createdAt],entity,entityId",
+    });
   }
 }

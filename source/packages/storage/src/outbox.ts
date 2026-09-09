@@ -1,3 +1,5 @@
+import Dexie from "dexie";
+
 import type { LastDoneDatabase } from "./database";
 import type { SyncOperation } from "./schema";
 
@@ -9,12 +11,19 @@ export async function enqueueOperation(
   if (!Number.isFinite(requestedTime)) {
     throw new Error(`invalid operation timestamp: ${operation.createdAt}`);
   }
-  const latest = await db.outbox.orderBy("createdAt").last();
-  const latestTime = latest
-    ? new Date(latest.createdAt).getTime()
-    : Number.NEGATIVE_INFINITY;
-  const createdAt = new Date(Math.max(requestedTime, latestTime + 1)).toISOString();
-  await db.outbox.add({ ...operation, createdAt });
+
+  // Reading the latest timestamp and inserting must be atomic: two concurrent
+  // enqueues could otherwise observe the same latest value and produce
+  // duplicate createdAt values. Callers already inside a Dexie transaction
+  // share that transaction instead of opening a nested one.
+  await db.transaction("rw", db.outbox, async () => {
+    const latest = await db.outbox.orderBy("createdAt").last();
+    const latestTime = latest
+      ? new Date(latest.createdAt).getTime()
+      : Number.NEGATIVE_INFINITY;
+    const createdAt = new Date(Math.max(requestedTime, latestTime + 1)).toISOString();
+    await db.outbox.add({ ...operation, createdAt });
+  });
 }
 
 export async function markOperationApplied(
@@ -32,6 +41,7 @@ export async function markOperationApplied(
   }
 }
 
+// Requires the [userId+status+createdAt] index declared in LastDoneDatabase v2.
 export async function listPendingOperations(
   db: LastDoneDatabase,
   userId: string,
@@ -42,12 +52,8 @@ export async function listPendingOperations(
   }
 
   return db.outbox
-    .where("[status+createdAt]")
-    .between(["pending", DexieMinKey], ["pending", DexieMaxKey])
-    .filter((operation) => operation.userId === userId)
+    .where("[userId+status+createdAt]")
+    .between([userId, "pending", Dexie.minKey], [userId, "pending", Dexie.maxKey])
     .limit(limit)
     .toArray();
 }
-
-const DexieMinKey = -Infinity;
-const DexieMaxKey = [[]];

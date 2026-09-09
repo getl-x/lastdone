@@ -12,6 +12,13 @@ describe("nextDueDate", () => {
     });
   }
 
+  it("clamps a fixed-yearly February 29 to February 28 in non-leap years", () => {
+    const rule: ScheduleRule = { type: "fixed-yearly", month: 2, day: 29 };
+
+    expect(nextDueDate(rule, "2024-02-28")).toBe("2024-02-29");
+    expect(nextDueDate(rule, "2024-02-29")).toBe("2025-02-28");
+  });
+
   it("rejects a non-positive relative interval", () => {
     expect(() =>
       nextDueDate({ type: "relative", every: 0, unit: "days" }, "2026-09-05"),

@@ -11,7 +11,9 @@ function daysUntilDue(input: StatusInput): number | null {
   return differenceInCalendarDays(input.dueDate, input.today);
 }
 
-export function classifyItem(input: StatusInput): ItemTemporalStatus {
+// Pure classification from a precomputed day delta, so callers that already
+// computed `daysUntilDue` do not parse the dates a second time.
+function classifyWithDays(input: StatusInput, days: number | null): ItemTemporalStatus {
   if (input.lifecycle === "paused") {
     return "paused";
   }
@@ -19,8 +21,6 @@ export function classifyItem(input: StatusInput): ItemTemporalStatus {
   if (input.lifecycle === "archived") {
     return "archived";
   }
-
-  const days = daysUntilDue(input);
 
   if (days === null) {
     return "not-started";
@@ -43,6 +43,14 @@ export function classifyItem(input: StatusInput): ItemTemporalStatus {
   }
 
   return "healthy";
+}
+
+export function classifyItem(input: StatusInput): ItemTemporalStatus {
+  if (input.lifecycle === "paused" || input.lifecycle === "archived") {
+    return input.lifecycle;
+  }
+
+  return classifyWithDays(input, daysUntilDue(input));
 }
 
 function formatChineseStatus(status: ItemTemporalStatus, days: number | null): string {
@@ -86,8 +94,8 @@ function formatEnglishStatus(status: ItemTemporalStatus, days: number | null): s
 }
 
 export function formatRelativeStatus(input: StatusInput, locale = "en"): string {
-  const status = classifyItem(input);
   const days = input.dueDate === null ? null : daysUntilDue(input);
+  const status = classifyWithDays(input, days);
 
   return locale.toLowerCase().startsWith("zh")
     ? formatChineseStatus(status, days)

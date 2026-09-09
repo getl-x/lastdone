@@ -35,6 +35,8 @@ function nextFixedYearly(month: number, day: number, baseline: LocalDate): Local
     throw new Error("month must not be greater than 12");
   }
 
+  // Validate against a leap year so fixed-yearly rules may target 2/29.
+  // clampLocalDate clamps it to 2/28 in non-leap years.
   if (day > 31 || day > daysInMonth(2000, month)) {
     throw new Error("day is invalid for month");
   }

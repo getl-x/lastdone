@@ -1,3 +1,4 @@
+import Dexie from "dexie";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   useCallback,
@@ -76,12 +77,12 @@ export function SettingsPage() {
       ),
     [db, userId],
   );
+  // Counts through the [userId+status+createdAt] index added in database v2.
   const pendingCount = useLiveQuery(
     () =>
       db.outbox
-        .where("userId")
-        .equals(userId)
-        .filter((operation) => operation.status === "pending")
+        .where("[userId+status+createdAt]")
+        .between([userId, "pending", Dexie.minKey], [userId, "pending", Dexie.maxKey])
         .count(),
     [db, userId],
   );
